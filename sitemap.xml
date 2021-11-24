@@ -2,6 +2,13 @@
 <urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9">
   
   <url>
+    <loc>https://fduyangcaho.github.io/2021/11/04/resource-package/</loc>
+    
+    <lastmod>2021-11-24</lastmod>
+    
+  </url>
+  
+  <url>
     <loc>https://fduyangcaho.github.io/about/index.html</loc>
     
     <lastmod>2021-11-24</lastmod>
@@ -44,13 +51,6 @@
   </url>
   
   <url>
-    <loc>https://fduyangcaho.github.io/2021/11/04/resource-package/</loc>
-    
-    <lastmod>2021-11-24</lastmod>
-    
-  </url>
-  
-  <url>
     <loc>https://fduyangcaho.github.io/2021/10/12/volume-manager-source-code-analysis/</loc>
     
     <lastmod>2021-11-24</lastmod>
@@ -58,14 +58,14 @@
   </url>
   
   <url>
-    <loc>https://fduyangcaho.github.io/2021/11/24/dmsetup-delete-deivce-busy/</loc>
+    <loc>https://fduyangcaho.github.io/2021/10/14/container-permissions-management-in-k8s/</loc>
     
     <lastmod>2021-11-24</lastmod>
     
   </url>
   
   <url>
-    <loc>https://fduyangcaho.github.io/2021/10/14/container-permissions-management-in-k8s/</loc>
+    <loc>https://fduyangcaho.github.io/2021/11/24/dmsetup-delete-deivce-busy/</loc>
     
     <lastmod>2021-11-24</lastmod>
     
@@ -79,27 +79,6 @@
     <priority>1.0</priority>
   </url>
 
-  
-  <url>
-    <loc>https://fduyangcaho.github.io/tags/Linux/</loc>
-    <lastmod>2021-11-24</lastmod>
-    <changefreq>daily</changefreq>
-    <priority>0.6</priority>
-  </url>
-  
-  <url>
-    <loc>https://fduyangcaho.github.io/tags/devicemapper/</loc>
-    <lastmod>2021-11-24</lastmod>
-    <changefreq>daily</changefreq>
-    <priority>0.6</priority>
-  </url>
-  
-  <url>
-    <loc>https://fduyangcaho.github.io/tags/storage/</loc>
-    <lastmod>2021-11-24</lastmod>
-    <changefreq>daily</changefreq>
-    <priority>0.6</priority>
-  </url>
   
   <url>
     <loc>https://fduyangcaho.github.io/tags/Kubernetes/</loc>
@@ -117,6 +96,27 @@
   
   <url>
     <loc>https://fduyangcaho.github.io/tags/container/</loc>
+    <lastmod>2021-11-24</lastmod>
+    <changefreq>daily</changefreq>
+    <priority>0.6</priority>
+  </url>
+  
+  <url>
+    <loc>https://fduyangcaho.github.io/tags/Linux/</loc>
+    <lastmod>2021-11-24</lastmod>
+    <changefreq>daily</changefreq>
+    <priority>0.6</priority>
+  </url>
+  
+  <url>
+    <loc>https://fduyangcaho.github.io/tags/devicemapper/</loc>
+    <lastmod>2021-11-24</lastmod>
+    <changefreq>daily</changefreq>
+    <priority>0.6</priority>
+  </url>
+  
+  <url>
+    <loc>https://fduyangcaho.github.io/tags/storage/</loc>
     <lastmod>2021-11-24</lastmod>
     <changefreq>daily</changefreq>
     <priority>0.6</priority>
@@ -216,7 +216,7 @@
   </url>
   
   <url>
-    <loc>https://fduyangcaho.github.io/categories/%E4%B8%93%E4%B8%9A/%E5%BC%80%E5%8F%91/Linux/</loc>
+    <loc>https://fduyangcaho.github.io/categories/%E4%B8%93%E4%B8%9A/%E5%BC%80%E5%8F%91/Kubernetes/</loc>
     <lastmod>2021-11-24</lastmod>
     <changefreq>daily</changefreq>
     <priority>0.6</priority>
@@ -230,7 +230,7 @@
   </url>
   
   <url>
-    <loc>https://fduyangcaho.github.io/categories/%E4%B8%93%E4%B8%9A/%E5%BC%80%E5%8F%91/Kubernetes/</loc>
+    <loc>https://fduyangcaho.github.io/categories/%E4%B8%93%E4%B8%9A/%E5%BC%80%E5%8F%91/Linux/</loc>
     <lastmod>2021-11-24</lastmod>
     <changefreq>daily</changefreq>
     <priority>0.6</priority>
