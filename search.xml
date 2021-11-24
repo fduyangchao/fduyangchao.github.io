@@ -70,6 +70,42 @@
       </tags>
   </entry>
   <entry>
+    <title>如何给git设置代理 (HTTPS/SSH)</title>
+    <url>/2021/11/24/git-proxy-configuration/</url>
+    <content><![CDATA[<h2 id="解决问题"><a href="#解决问题" class="headerlink" title="解决问题"></a>解决问题</h2><p>开发者经常需要在终端和github之间进行repository的push/pull等操作，但是由于GFW的存在，不得不通过代理保障github访问的流畅度（太不友好..）。本文简单介绍如何给github配置HTTPs和SSH代理，让开发者对代理无感知丝滑使用。</p>
+<span id="more"></span>
+
+<h2 id="分辨需要设置的代理"><a href="#分辨需要设置的代理" class="headerlink" title="分辨需要设置的代理"></a>分辨需要设置的代理</h2><ul>
+<li>HTTP 形式：<blockquote>
+<p>git clone <a href="https://github.com/owner/git.git">https://github.com/owner/git.git</a></p>
+</blockquote>
+</li>
+<li>SSH 形式：<blockquote>
+<p>git clone <a href="mailto:&#x67;&#105;&#116;&#64;&#x67;&#105;&#x74;&#104;&#x75;&#98;&#46;&#99;&#111;&#109;">&#x67;&#105;&#116;&#64;&#x67;&#105;&#x74;&#104;&#x75;&#98;&#46;&#99;&#111;&#109;</a>:owner/git.git</p>
+</blockquote>
+</li>
+</ul>
+<h2 id="HTTP-形式"><a href="#HTTP-形式" class="headerlink" title="HTTP 形式"></a>HTTP 形式</h2><h3 id="走-HTTP-代理"><a href="#走-HTTP-代理" class="headerlink" title="走 HTTP 代理"></a>走 HTTP 代理</h3><figure class="highlight bash"><table><tr><td class="code"><pre><code class="hljs bash">git config --global http.proxy <span class="hljs-string">&quot;http://127.0.0.1:8080&quot;</span><br>git config --global https.proxy <span class="hljs-string">&quot;http://127.0.0.1:8080&quot;</span><br></code></pre></td></tr></table></figure>
+
+<h3 id="走-socks5-代理（如-Shadowsocks）"><a href="#走-socks5-代理（如-Shadowsocks）" class="headerlink" title="走 socks5 代理（如 Shadowsocks）"></a>走 socks5 代理（如 Shadowsocks）</h3><figure class="highlight bash"><table><tr><td class="code"><pre><code class="hljs bash">git config --global http.proxy <span class="hljs-string">&quot;socks5://127.0.0.1:1080&quot;</span><br>git config --global https.proxy <span class="hljs-string">&quot;socks5://127.0.0.1:1080&quot;</span><br></code></pre></td></tr></table></figure>
+
+<h3 id="取消设置"><a href="#取消设置" class="headerlink" title="取消设置"></a>取消设置</h3><figure class="highlight bash"><table><tr><td class="code"><pre><code class="hljs bash">git config --global --<span class="hljs-built_in">unset</span> http.proxy<br>git config --global --<span class="hljs-built_in">unset</span> https.proxy<br></code></pre></td></tr></table></figure>
+
+<h2 id="SSH-形式"><a href="#SSH-形式" class="headerlink" title="SSH 形式"></a>SSH 形式</h2><p>修改 <code>~/.ssh/config</code> 文件（不存在则新建）：</p>
+<figure class="highlight crmsh"><table><tr><td class="code"><pre><code class="hljs crmsh"><span class="hljs-comment"># 必须是 github.com</span><br>Host github.com<br>   HostName github.com<br>   <span class="hljs-keyword">User</span> <span class="hljs-title">git</span><br>   <span class="hljs-comment"># 走 HTTP 代理</span><br>   <span class="hljs-comment"># ProxyCommand socat - PROXY:127.0.0.1:%h:%p,proxyport=8080</span><br>   <span class="hljs-comment"># 走 socks5 代理（如 Shadowsocks）</span><br>   <span class="hljs-comment"># ProxyCommand nc -v -x 127.0.0.1:1080 %h %p</span><br></code></pre></td></tr></table></figure>
+]]></content>
+      <categories>
+        <category>专业</category>
+        <category>工具</category>
+        <category>git</category>
+      </categories>
+      <tags>
+        <tag>git</tag>
+        <tag>github</tag>
+        <tag>ssh</tag>
+      </tags>
+  </entry>
+  <entry>
     <title>如何强制删除&quot;Device Busy&quot;状态的devicemapper设备</title>
     <url>/2021/11/24/dmsetup-delete-deivce-busy/</url>
     <content><![CDATA[<p><code>dmsetup remove &lt;device&gt;</code>设备时，偶尔出现<code>Device Busy</code>无法删除。本文提供一种强制删除dm设备的操作步骤，可能无法解决所有的问题。后续需要深入研究Linux devicemapper的IO栈，找到根因。</p>
@@ -119,42 +155,6 @@
         <tag>Linux</tag>
         <tag>devicemapper</tag>
         <tag>storage</tag>
-      </tags>
-  </entry>
-  <entry>
-    <title>如何给git设置代理 (HTTPS/SSH)</title>
-    <url>/2021/11/24/git-proxy-configuration/</url>
-    <content><![CDATA[<h2 id="解决问题"><a href="#解决问题" class="headerlink" title="解决问题"></a>解决问题</h2><p>开发者经常需要在终端和github之间进行repository的push/pull等操作，但是由于GFW的存在，不得不通过代理保障github访问的流畅度（太不友好..）。本文简单介绍如何给github配置HTTPs和SSH代理，让开发者对代理无感知丝滑使用。</p>
-<span id="more"></span>
-
-<h2 id="分辨需要设置的代理"><a href="#分辨需要设置的代理" class="headerlink" title="分辨需要设置的代理"></a>分辨需要设置的代理</h2><ul>
-<li>HTTP 形式：<blockquote>
-<p>git clone <a href="https://github.com/owner/git.git">https://github.com/owner/git.git</a></p>
-</blockquote>
-</li>
-<li>SSH 形式：<blockquote>
-<p>git clone <a href="mailto:&#x67;&#x69;&#116;&#x40;&#x67;&#x69;&#116;&#104;&#x75;&#98;&#46;&#99;&#x6f;&#109;">&#x67;&#x69;&#116;&#x40;&#x67;&#x69;&#116;&#104;&#x75;&#98;&#46;&#99;&#x6f;&#109;</a>:owner/git.git</p>
-</blockquote>
-</li>
-</ul>
-<h2 id="HTTP-形式"><a href="#HTTP-形式" class="headerlink" title="HTTP 形式"></a>HTTP 形式</h2><h3 id="走-HTTP-代理"><a href="#走-HTTP-代理" class="headerlink" title="走 HTTP 代理"></a>走 HTTP 代理</h3><figure class="highlight bash"><table><tr><td class="code"><pre><code class="hljs bash">git config --global http.proxy <span class="hljs-string">&quot;http://127.0.0.1:8080&quot;</span><br>git config --global https.proxy <span class="hljs-string">&quot;http://127.0.0.1:8080&quot;</span><br></code></pre></td></tr></table></figure>
-
-<h3 id="走-socks5-代理（如-Shadowsocks）"><a href="#走-socks5-代理（如-Shadowsocks）" class="headerlink" title="走 socks5 代理（如 Shadowsocks）"></a>走 socks5 代理（如 Shadowsocks）</h3><figure class="highlight bash"><table><tr><td class="code"><pre><code class="hljs bash">git config --global http.proxy <span class="hljs-string">&quot;socks5://127.0.0.1:1080&quot;</span><br>git config --global https.proxy <span class="hljs-string">&quot;socks5://127.0.0.1:1080&quot;</span><br></code></pre></td></tr></table></figure>
-
-<h3 id="取消设置"><a href="#取消设置" class="headerlink" title="取消设置"></a>取消设置</h3><figure class="highlight bash"><table><tr><td class="code"><pre><code class="hljs bash">git config --global --<span class="hljs-built_in">unset</span> http.proxy<br>git config --global --<span class="hljs-built_in">unset</span> https.proxy<br></code></pre></td></tr></table></figure>
-
-<h2 id="SSH-形式"><a href="#SSH-形式" class="headerlink" title="SSH 形式"></a>SSH 形式</h2><p>修改 <code>~/.ssh/config</code> 文件（不存在则新建）：</p>
-<figure class="highlight crmsh"><table><tr><td class="code"><pre><code class="hljs crmsh"><span class="hljs-comment"># 必须是 github.com</span><br>Host github.com<br>   HostName github.com<br>   <span class="hljs-keyword">User</span> <span class="hljs-title">git</span><br>   <span class="hljs-comment"># 走 HTTP 代理</span><br>   <span class="hljs-comment"># ProxyCommand socat - PROXY:127.0.0.1:%h:%p,proxyport=8080</span><br>   <span class="hljs-comment"># 走 socks5 代理（如 Shadowsocks）</span><br>   <span class="hljs-comment"># ProxyCommand nc -v -x 127.0.0.1:1080 %h %p</span><br></code></pre></td></tr></table></figure>
-]]></content>
-      <categories>
-        <category>专业</category>
-        <category>工具</category>
-        <category>git</category>
-      </categories>
-      <tags>
-        <tag>git</tag>
-        <tag>github</tag>
-        <tag>ssh</tag>
       </tags>
   </entry>
   <entry>
