@@ -1,0 +1,545 @@
+
+
+<!DOCTYPE html>
+<html lang="zh-CN" data-default-color-scheme=auto>
+
+
+
+<head>
+  <meta charset="UTF-8">
+  <link rel="apple-touch-icon" sizes="76x76" href="/img/favicon.png">
+  <link rel="icon" href="/img/favicon.png">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=5.0, shrink-to-fit=no">
+  <meta http-equiv="x-ua-compatible" content="ie=edge">
+  
+  <meta name="theme-color" content="#2f4154">
+  <meta name="description" content="工作中需要调研k8s存储插件从in-tree模式平滑升级到CSI的可行性，因此对Kubelet中的Volume Manager模块进行源码分析，期望在全面理解代码逻辑和设计思路的前提下，避免采坑。按照一贯的思路和习惯，从接口、数据结构、函数/方法三个方面入手。">
+  <meta name="author" content="Chao">
+  <meta name="keywords" content="">
+  <meta name="description" content="工作中需要调研k8s存储插件从in-tree模式平滑升级到CSI的可行性，因此对Kubelet中的Volume Manager模块进行源码分析，期望在全面理解代码逻辑和设计思路的前提下，避免采坑。按照一贯的思路和习惯，从接口、数据结构、函数&#x2F;方法三个方面入手。">
+<meta property="og:type" content="article">
+<meta property="og:title" content="Volume Manager源码分析">
+<meta property="og:url" content="https://fduyangcaho.github.io/2021/10/12/volume-manager-source-code-analysis/index.html">
+<meta property="og:site_name" content="Chao&#39;s Blog">
+<meta property="og:description" content="工作中需要调研k8s存储插件从in-tree模式平滑升级到CSI的可行性，因此对Kubelet中的Volume Manager模块进行源码分析，期望在全面理解代码逻辑和设计思路的前提下，避免采坑。按照一贯的思路和习惯，从接口、数据结构、函数&#x2F;方法三个方面入手。">
+<meta property="og:locale" content="zh_CN">
+<meta property="article:published_time" content="2021-10-12T14:10:01.000Z">
+<meta property="article:modified_time" content="2021-11-24T03:34:30.359Z">
+<meta property="article:author" content="Chao">
+<meta property="article:tag" content="Kubernetes">
+<meta property="article:tag" content="golang">
+<meta property="article:tag" content="云原生">
+<meta name="twitter:card" content="summary_large_image">
+  
+  <title>Volume Manager源码分析 - Chao&#39;s Blog</title>
+
+  <link  rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap@4/dist/css/bootstrap.min.css" />
+
+
+  <link  rel="stylesheet" href="https://cdn.jsdelivr.net/npm/github-markdown-css@4/github-markdown.min.css" />
+  <link  rel="stylesheet" href="/lib/hint/hint.min.css" />
+
+  
+    
+    
+      
+      <link  rel="stylesheet" href="https://cdn.jsdelivr.net/npm/highlight.js@10/styles/github-gist.min.css" />
+    
+  
+
+  
+    <link  rel="stylesheet" href="https://cdn.jsdelivr.net/npm/@fancyapps/fancybox@3/dist/jquery.fancybox.min.css" />
+  
+
+
+<!-- 主题依赖的图标库，不要自行修改 -->
+
+<link rel="stylesheet" href="//at.alicdn.com/t/font_1749284_ba1fz6golrf.css">
+
+
+
+<link rel="stylesheet" href="//at.alicdn.com/t/font_1736178_kmeydafke9r.css">
+
+
+<link  rel="stylesheet" href="/css/main.css" />
+
+<!-- 自定义样式保持在最底部 -->
+
+
+  <script id="fluid-configs">
+    var Fluid = window.Fluid || {};
+    var CONFIG = {"hostname":"fduyangcaho.github.io","root":"/","version":"1.8.12","typing":{"enable":true,"typeSpeed":70,"cursorChar":"_","loop":false},"anchorjs":{"enable":true,"element":"h1,h2,h3,h4,h5,h6","placement":"right","visible":"hover","icon":""},"progressbar":{"enable":true,"height_px":3,"color":"#29d","options":{"showSpinner":false,"trickleSpeed":100}},"copy_btn":true,"image_zoom":{"enable":true,"img_url_replace":["",""]},"toc":{"enable":true,"headingSelector":"h1,h2,h3,h4,h5,h6","collapseDepth":0},"lazyload":{"enable":true,"loading_img":"/img/loading.gif","onlypost":false,"offset_factor":2},"web_analytics":{"enable":false,"baidu":null,"google":null,"gtag":null,"tencent":{"sid":null,"cid":null},"woyaola":null,"cnzz":null,"leancloud":{"app_id":null,"app_key":null,"server_url":null,"path":"window.location.pathname"}},"search_path":"/local-search.xml"};
+  </script>
+  <script  src="/js/utils.js" ></script>
+  <script  src="/js/color-schema.js" ></script>
+<meta name="generator" content="Hexo 5.4.0"><link rel="alternate" href="/atom.xml" title="Chao's Blog" type="application/atom+xml">
+</head>
+
+
+<body>
+  <header style="height: 70vh;">
+    <nav id="navbar" class="navbar fixed-top  navbar-expand-lg navbar-dark scrolling-navbar">
+  <div class="container">
+    <a class="navbar-brand" href="/">
+      <strong>Simon&#39;s Blog</strong>
+    </a>
+
+    <button id="navbar-toggler-btn" class="navbar-toggler" type="button" data-toggle="collapse"
+            data-target="#navbarSupportedContent"
+            aria-controls="navbarSupportedContent" aria-expanded="false" aria-label="Toggle navigation">
+      <div class="animated-icon"><span></span><span></span><span></span></div>
+    </button>
+
+    <!-- Collapsible content -->
+    <div class="collapse navbar-collapse" id="navbarSupportedContent">
+      <ul class="navbar-nav ml-auto text-center">
+        
+          
+          
+          
+          
+            <li class="nav-item">
+              <a class="nav-link" href="/">
+                <i class="iconfont icon-home-fill"></i>
+                首页
+              </a>
+            </li>
+          
+        
+          
+          
+          
+          
+            <li class="nav-item">
+              <a class="nav-link" href="/archives/">
+                <i class="iconfont icon-archive-fill"></i>
+                归档
+              </a>
+            </li>
+          
+        
+          
+          
+          
+          
+            <li class="nav-item">
+              <a class="nav-link" href="/categories/">
+                <i class="iconfont icon-category-fill"></i>
+                分类
+              </a>
+            </li>
+          
+        
+          
+          
+          
+          
+            <li class="nav-item">
+              <a class="nav-link" href="/tags/">
+                <i class="iconfont icon-tags-fill"></i>
+                标签
+              </a>
+            </li>
+          
+        
+          
+          
+          
+          
+            <li class="nav-item">
+              <a class="nav-link" href="/about/">
+                <i class="iconfont icon-user-fill"></i>
+                关于
+              </a>
+            </li>
+          
+        
+        
+          <li class="nav-item" id="search-btn">
+            <a class="nav-link" target="_self" href="javascript:;" data-toggle="modal" data-target="#modalSearch" aria-label="Search">
+              &nbsp;<i class="iconfont icon-search"></i>&nbsp;
+            </a>
+          </li>
+        
+        
+          <li class="nav-item" id="color-toggle-btn">
+            <a class="nav-link" target="_self" href="javascript:;" aria-label="Color Toggle">&nbsp;<i
+                class="iconfont icon-dark" id="color-toggle-icon"></i>&nbsp;</a>
+          </li>
+        
+      </ul>
+    </div>
+  </div>
+</nav>
+
+    <div class="banner" id="banner" parallax=true
+         style="background: url('https://cdn.jsdelivr.net/gh/simonyangchao/resources@image/1597031623646.jpg') no-repeat center center;
+           background-size: cover;">
+      <div class="full-bg-img">
+        <div class="mask flex-center" style="background-color: rgba(0, 0, 0, 0.3)">
+          <div class="page-header text-center fade-in-up">
+            <span class="h2" id="subtitle" title="Volume Manager源码分析">
+              
+            </span>
+
+            
+              <div class="mt-3">
+  
+  
+    <span class="post-meta">
+      <i class="iconfont icon-date-fill" aria-hidden="true"></i>
+      <time datetime="2021-10-12 22:10" pubdate>
+        2021年10月12日 晚上
+      </time>
+    </span>
+  
+</div>
+
+<div class="mt-1">
+  
+    <span class="post-meta mr-2">
+      <i class="iconfont icon-chart"></i>
+      14k 字
+    </span>
+  
+
+  
+    <span class="post-meta mr-2">
+      <i class="iconfont icon-clock-fill"></i>
+      
+      
+      43 分钟
+    </span>
+  
+
+  
+  
+</div>
+
+            
+          </div>
+
+          
+        </div>
+      </div>
+    </div>
+  </header>
+
+  <main>
+    
+      
+
+<div class="container-fluid nopadding-x">
+  <div class="row nomargin-x">
+    <div class="d-none d-lg-block col-lg-2"></div>
+    <div class="col-lg-8 nopadding-x-md">
+      <div class="container nopadding-x-md" id="board-ctn">
+        <div class="py-5" id="board">
+          <article class="post-content mx-auto">
+            <!-- SEO header -->
+            <h1 style="display: none">Volume Manager源码分析</h1>
+            
+            <div class="markdown-body">
+              <p>工作中需要调研k8s存储插件从in-tree模式平滑升级到CSI的可行性，因此对Kubelet中的Volume Manager模块进行源码分析，期望在全面理解代码逻辑和设计思路的前提下，避免采坑。按照一贯的思路和习惯，从接口、数据结构、函数/方法三个方面入手。</p>
+<span id="more"></span>
+
+<h1 id="接口"><a href="#接口" class="headerlink" title="接口"></a>接口</h1><ul>
+<li>运行在kubelet 里让存储Ready的部件，主要是mount/unmount（attach/detach可选）</li>
+<li>pod调度到这个node上后才会有卷的相应操作，所以它的触发端是kubelet（严格讲是kubelet里的pod manager），根据Pod Manager里pod spec里申明的存储来触发卷的挂载操作</li>
+<li>Kubelet监听到调度到该节点上的pod声明，把pod缓存到Pod Manager中，VolumeManager通过Pod Manager获取PV/PVC的状态，并进行分析出具体的attach/detach、mount/umount操作然后调用plugin进行相应的业务处理</li>
+</ul>
+<figure class="highlight go"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br><span class="line">7</span><br><span class="line">8</span><br><span class="line">9</span><br><span class="line">10</span><br><span class="line">11</span><br><span class="line">12</span><br><span class="line">13</span><br><span class="line">14</span><br><span class="line">15</span><br><span class="line">16</span><br><span class="line">17</span><br><span class="line">18</span><br><span class="line">19</span><br><span class="line">20</span><br><span class="line">21</span><br></pre></td><td class="code"><pre><code class="hljs go"><span class="hljs-comment">// VolumeManager runs a set of asynchronous loops that figure out which volumes</span><br><span class="hljs-comment">// need to be attached/mounted/unmounted/detached based on the pods scheduled on</span><br><span class="hljs-comment">// this node and makes it so.</span><br><span class="hljs-keyword">type</span> VolumeManager <span class="hljs-keyword">interface</span> &#123;<br> <br>	Run(sourcesReady config.SourcesReady, stopCh &lt;-<span class="hljs-keyword">chan</span> <span class="hljs-keyword">struct</span>&#123;&#125;)<br> <br>	WaitForAttachAndMount(pod *v1.Pod) error<br> <br>	GetMountedVolumesForPod(podName types.UniquePodName) container.VolumeMap<br> <br>	GetExtraSupplementalGroupsForPod(pod *v1.Pod) []<span class="hljs-keyword">int64</span><br> <br>	GetVolumesInUse() []v1.UniqueVolumeName<br> <br>	ReconcilerStatesHasBeenSynced() <span class="hljs-keyword">bool</span><br> <br>	VolumeIsAttached(volumeName v1.UniqueVolumeName) <span class="hljs-keyword">bool</span><br> <br>	MarkVolumesAsReportedInUse(volumesReportedAsInUse []v1.UniqueVolumeName)<br><br></code></pre></td></tr></table></figure>
+
+
+
+<h1 id="数据结构"><a href="#数据结构" class="headerlink" title="数据结构"></a>数据结构</h1><figure class="highlight go"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br><span class="line">7</span><br><span class="line">8</span><br><span class="line">9</span><br><span class="line">10</span><br><span class="line">11</span><br><span class="line">12</span><br><span class="line">13</span><br><span class="line">14</span><br><span class="line">15</span><br><span class="line">16</span><br><span class="line">17</span><br></pre></td><td class="code"><pre><code class="hljs go"><span class="hljs-comment">// volumeManager implements the VolumeManager interface</span><br><span class="hljs-keyword">type</span> volumeManager <span class="hljs-keyword">struct</span> &#123;<br>	<br>	kubeClient clientset.Interface			<span class="hljs-comment">// dswPopulator通过kubeClient获取pvc和pv对象</span><br>	<span class="hljs-comment">// volumePluginMgr用于管理存储插件</span><br>	volumePluginMgr *volume.VolumePluginMgr	<span class="hljs-comment">// volumePluginMgr用于管理存储插件</span><br>	<br>	desiredStateOfWorld cache.DesiredStateOfWorld	<span class="hljs-comment">// 期望状态</span><br>	<br>	actualStateOfWorld cache.ActualStateOfWorld		<span class="hljs-comment">// 当前状态</span><br>	operationExecutor operationexecutor.OperationExecutor	<span class="hljs-comment">// 开始异步attach, detach, mount, unmount等操作</span><br><br>	reconciler reconciler.Reconciler	<span class="hljs-comment">// Rconciler运行异步周期性的调谐逻辑，调谐dsw和asw的状态，出发attach, detach, mount, umount等操作</span><br><br>	desiredStateOfWorldPopulator populator.DesiredStateOfWorldPopulator		<span class="hljs-comment">// 运行一个异步的周期循环，通过kubelet pod manager计算dsw</span><br>&#125;<br><br></code></pre></td></tr></table></figure>
+
+<p>volumeManager结构体实现了VolumeManager接口，主要有两个数据结构需要注意：</p>
+<ul>
+<li>desiredStateOfWorld：预期状态，表征哪些volume需要被attach，哪些pods引用这个volume。dsw由dswPopulator通过kubelet pod manager计算并更新。</li>
+<li>actualStateOfWorld：当前状态，表征哪些volume已经被attach到node，这些volume被mount到哪些pod。asw由reconcile函数的attach, dtach, mount, umount的成功执行操作更新</li>
+</ul>
+<p><strong><code>desiredStateOfWorld</code></strong></p>
+<figure class="highlight go"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br><span class="line">7</span><br><span class="line">8</span><br><span class="line">9</span><br><span class="line">10</span><br><span class="line">11</span><br><span class="line">12</span><br><span class="line">13</span><br><span class="line">14</span><br><span class="line">15</span><br><span class="line">16</span><br><span class="line">17</span><br><span class="line">18</span><br><span class="line">19</span><br><span class="line">20</span><br><span class="line">21</span><br><span class="line">22</span><br><span class="line">23</span><br><span class="line">24</span><br><span class="line">25</span><br><span class="line">26</span><br><span class="line">27</span><br><span class="line">28</span><br><span class="line">29</span><br><span class="line">30</span><br><span class="line">31</span><br><span class="line">32</span><br><span class="line">33</span><br><span class="line">34</span><br><span class="line">35</span><br><span class="line">36</span><br><span class="line">37</span><br><span class="line">38</span><br><span class="line">39</span><br><span class="line">40</span><br><span class="line">41</span><br><span class="line">42</span><br><span class="line">43</span><br><span class="line">44</span><br><span class="line">45</span><br><span class="line">46</span><br><span class="line">47</span><br><span class="line">48</span><br><span class="line">49</span><br><span class="line">50</span><br><span class="line">51</span><br><span class="line">52</span><br></pre></td><td class="code"><pre><code class="hljs go"><span class="hljs-keyword">type</span> desiredStateOfWorld <span class="hljs-keyword">struct</span> &#123;<br>	volumesToMount <span class="hljs-keyword">map</span>[v1.UniqueVolumeName]volumeToMount<br>	volumePluginMgr *volume.VolumePluginMgr<br>	sync.RWMutex<br>&#125;<br><br><span class="hljs-comment">// The volume object represents a volume that should be attached to this node,</span><br><span class="hljs-comment">// and mounted to podsToMount.</span><br><span class="hljs-keyword">type</span> volumeToMount <span class="hljs-keyword">struct</span> &#123;<br>	<span class="hljs-comment">// volumeName contains the unique identifier for this volume.</span><br>	volumeName v1.UniqueVolumeName<br><br>	<span class="hljs-comment">// podsToMount is a map containing the set of pods that reference this</span><br>	<span class="hljs-comment">// volume and should mount it once it is attached. The key in the map is</span><br>	<span class="hljs-comment">// the name of the pod and the value is a pod object containing more</span><br>	<span class="hljs-comment">// information about the pod.</span><br>	podsToMount <span class="hljs-keyword">map</span>[types.UniquePodName]podToMount<br><br>	<span class="hljs-comment">// pluginIsAttachable indicates that the plugin for this volume implements</span><br>	<span class="hljs-comment">// the volume.Attacher interface</span><br>	pluginIsAttachable <span class="hljs-keyword">bool</span><br><br>	<span class="hljs-comment">// volumeGidValue contains the value of the GID annotation, if present.</span><br>	volumeGidValue <span class="hljs-keyword">string</span><br><br>	<span class="hljs-comment">// reportedInUse indicates that the volume was successfully added to the</span><br>	<span class="hljs-comment">// VolumesInUse field in the node&#x27;s status.</span><br>	reportedInUse <span class="hljs-keyword">bool</span><br>&#125;<br><br><span class="hljs-comment">// The pod object represents a pod that references the underlying volume and</span><br><span class="hljs-comment">// should mount it once it is attached.</span><br><span class="hljs-keyword">type</span> podToMount <span class="hljs-keyword">struct</span> &#123;<br>	<span class="hljs-comment">// podName contains the name of this pod.</span><br>	podName types.UniquePodName<br><br>	<span class="hljs-comment">// Pod to mount the volume to. Used to create NewMounter.</span><br>	pod *v1.Pod<br><br>	<span class="hljs-comment">// volume spec containing the specification for this volume. Used to</span><br>	<span class="hljs-comment">// generate the volume plugin object, and passed to plugin methods.</span><br>	<span class="hljs-comment">// For non-PVC volumes this is the same as defined in the pod object. For</span><br>	<span class="hljs-comment">// PVC volumes it is from the dereferenced PV object.</span><br>	spec *volume.Spec<br><br>	<span class="hljs-comment">// outerVolumeSpecName is the volume.Spec.Name() of the volume as referenced</span><br>	<span class="hljs-comment">// directly in the pod. If the volume was referenced through a persistent</span><br>	<span class="hljs-comment">// volume claim, this contains the volume.Spec.Name() of the persistent</span><br>	<span class="hljs-comment">// volume claim</span><br>	outerVolumeSpecName <span class="hljs-keyword">string</span><br>&#125;<br><br></code></pre></td></tr></table></figure>
+
+<p><strong><code>actualStateOfWorld</code></strong></p>
+<figure class="highlight go"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br></pre></td><td class="code"><pre><code class="hljs go"><span class="hljs-keyword">type</span> actualStateOfWorld <span class="hljs-keyword">struct</span> &#123;<br>	nodeName types.NodeName<br>	attachedVolumes <span class="hljs-keyword">map</span>[v1.UniqueVolumeName]attachedVolume<br>	volumePluginMgr *volume.VolumePluginMgr<br>	sync.RWMutex<br>&#125;<br></code></pre></td></tr></table></figure>
+
+
+
+<h1 id="功能实现"><a href="#功能实现" class="headerlink" title="功能实现"></a>功能实现</h1><h2 id="volumeManager初始化"><a href="#volumeManager初始化" class="headerlink" title="volumeManager初始化"></a>volumeManager初始化</h2><p>volumeManger结构体初始化</p>
+<figure class="highlight go"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br><span class="line">7</span><br><span class="line">8</span><br><span class="line">9</span><br><span class="line">10</span><br><span class="line">11</span><br><span class="line">12</span><br><span class="line">13</span><br><span class="line">14</span><br></pre></td><td class="code"><pre><code class="hljs go"><span class="hljs-comment">// setup volumeManager</span><br>	klet.volumeManager = volumemanager.NewVolumeManager(<br>		kubeCfg.EnableControllerAttachDetach,<br>		nodeName,<br>		klet.podManager,<br>		klet.statusManager,<br>		klet.kubeClient,<br>		klet.volumePluginMgr,<br>		klet.containerRuntime,<br>		kubeDeps.Mounter,<br>		klet.getPodsDir(),<br>		kubeDeps.Recorder,<br>		experimentalCheckNodeCapabilitiesBeforeMount,<br>		keepTerminatedPodVolumes)<br></code></pre></td></tr></table></figure>
+
+
+
+<h2 id="启动volumeManger-Run"><a href="#启动volumeManger-Run" class="headerlink" title="启动volumeManger.Run()"></a>启动volumeManger.Run()</h2><ul>
+<li>goroutine启动dswPopulator.Run()：从apiserver同步pod信息，更新dsw</li>
+<li>goroutine启动reconcile.Run()：调谐预期状态和当前状态，将当前状态手链到预期状态</li>
+</ul>
+<h3 id="desiredStateOfWorldPopulator-Run"><a href="#desiredStateOfWorldPopulator-Run" class="headerlink" title="desiredStateOfWorldPopulator.Run()"></a>desiredStateOfWorldPopulator.Run()</h3><p>dswp.Run()启动一个loop定时调用dswp.populatorLoop()，用于更新dsw</p>
+<figure class="highlight stylus"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br><span class="line">7</span><br><span class="line">8</span><br><span class="line">9</span><br><span class="line">10</span><br><span class="line">11</span><br><span class="line">12</span><br><span class="line">13</span><br><span class="line">14</span><br></pre></td><td class="code"><pre><code class="hljs stylus"><br>func (dswp *desiredStateOfWorldPopulator) Run(sourcesReady config<span class="hljs-selector-class">.SourcesReady</span>, stopCh &lt;-chan struct&#123;&#125;) &#123;<br>	<span class="hljs-comment">// Wait for the completion of a loop that started after sources are all ready, then set hasAddedPods accordingly</span><br>	glog<span class="hljs-selector-class">.Infof</span>(<span class="hljs-string">&quot;Desired state populator starts to run&quot;</span>)<br>	wait<span class="hljs-selector-class">.PollUntil</span>(dswp<span class="hljs-selector-class">.loopSleepDuration</span>, func() (bool, error) &#123;<br>		done := sourcesReady<span class="hljs-selector-class">.AllReady</span>()<br>		dswp<span class="hljs-selector-class">.populatorLoop</span>()<br>		return done, nil<br>	&#125;, stopCh)<br>	dswp<span class="hljs-selector-class">.hasAddedPodsLock</span><span class="hljs-selector-class">.Lock</span>()<br>	dswp<span class="hljs-selector-class">.hasAddedPods</span> = true<br>	dswp<span class="hljs-selector-class">.hasAddedPodsLock</span><span class="hljs-selector-class">.Unlock</span>()<br>	wait<span class="hljs-selector-class">.Until</span>(dswp<span class="hljs-selector-class">.populatorLoop</span>, dswp<span class="hljs-selector-class">.loopSleepDuration</span>, stopCh)<br>&#125;<br></code></pre></td></tr></table></figure>
+
+<h4 id="dswp-populatorLoop"><a href="#dswp-populatorLoop" class="headerlink" title="dswp.populatorLoop()"></a>dswp.populatorLoop()</h4><p>dswp.populatorLoop()先调用dswp.findAndAddNewPods()，获取所有pods并更新到dsw</p>
+<figure class="highlight go"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br><span class="line">7</span><br><span class="line">8</span><br><span class="line">9</span><br><span class="line">10</span><br><span class="line">11</span><br><span class="line">12</span><br><span class="line">13</span><br><span class="line">14</span><br><span class="line">15</span><br><span class="line">16</span><br><span class="line">17</span><br><span class="line">18</span><br><span class="line">19</span><br></pre></td><td class="code"><pre><code class="hljs go"><span class="hljs-function"><span class="hljs-keyword">func</span> <span class="hljs-params">(dswp *desiredStateOfWorldPopulator)</span> <span class="hljs-title">populatorLoop</span><span class="hljs-params">()</span></span> &#123;<br>	dswp.findAndAddNewPods()<br> <br>	<span class="hljs-comment">// findAndRemoveDeletedPods() calls out to the container runtime to</span><br>	<span class="hljs-comment">// determine if the containers for a given pod are terminated. This is</span><br>	<span class="hljs-comment">// an expensive operation, therefore we limit the rate that</span><br>	<span class="hljs-comment">// findAndRemoveDeletedPods() is called independently of the main</span><br>	<span class="hljs-comment">// populator loop.</span><br>	<span class="hljs-keyword">if</span> time.Since(dswp.timeOfLastGetPodStatus) &lt; dswp.getPodStatusRetryDuration &#123;<br>		glog.V(<span class="hljs-number">5</span>).Infof(<br>			<span class="hljs-string">&quot;Skipping findAndRemoveDeletedPods(). Not permitted until %v (getPodStatusRetryDuration %v).&quot;</span>,<br>			dswp.timeOfLastGetPodStatus.Add(dswp.getPodStatusRetryDuration),<br>			dswp.getPodStatusRetryDuration)<br> <br>		<span class="hljs-keyword">return</span><br>	&#125;<br> <br>	dswp.findAndRemoveDeletedPods()<br>&#125;<br></code></pre></td></tr></table></figure>
+
+<h5 id="dsw-findAndAddNewPods"><a href="#dsw-findAndAddNewPods" class="headerlink" title="dsw.findAndAddNewPods()"></a>dsw.findAndAddNewPods()</h5><ul>
+<li>  调用podManager获取所有的pods</li>
+<li>  调用processPodVolumes去更新desiredStateOfWorld</li>
+</ul>
+<figure class="highlight go"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br><span class="line">7</span><br><span class="line">8</span><br><span class="line">9</span><br><span class="line">10</span><br><span class="line">11</span><br><span class="line">12</span><br><span class="line">13</span><br><span class="line">14</span><br><span class="line">15</span><br><span class="line">16</span><br><span class="line">17</span><br><span class="line">18</span><br><span class="line">19</span><br><span class="line">20</span><br><span class="line">21</span><br><span class="line">22</span><br><span class="line">23</span><br><span class="line">24</span><br><span class="line">25</span><br></pre></td><td class="code"><pre><code class="hljs go"><span class="hljs-comment">// Iterate through all pods and add to desired state of world if they don&#x27;t</span><br><span class="hljs-comment">// exist but should</span><br><span class="hljs-function"><span class="hljs-keyword">func</span> <span class="hljs-params">(dswp *desiredStateOfWorldPopulator)</span> <span class="hljs-title">findAndAddNewPods</span><span class="hljs-params">()</span></span> &#123;<br>	<span class="hljs-comment">// Map unique pod name to outer volume name to MountedVolume.</span><br>	mountedVolumesForPod := <span class="hljs-built_in">make</span>(<span class="hljs-keyword">map</span>[volumetypes.UniquePodName]<span class="hljs-keyword">map</span>[<span class="hljs-keyword">string</span>]cache.MountedVolume)<br>	<span class="hljs-keyword">if</span> utilfeature.DefaultFeatureGate.Enabled(features.ExpandInUsePersistentVolumes) &#123;<br>		<span class="hljs-keyword">for</span> _, mountedVolume := <span class="hljs-keyword">range</span> dswp.actualStateOfWorld.GetMountedVolumes() &#123;<br>			mountedVolumes, exist := mountedVolumesForPod[mountedVolume.PodName]<br>			<span class="hljs-keyword">if</span> !exist &#123;<br>				mountedVolumes = <span class="hljs-built_in">make</span>(<span class="hljs-keyword">map</span>[<span class="hljs-keyword">string</span>]cache.MountedVolume)<br>				mountedVolumesForPod[mountedVolume.PodName] = mountedVolumes<br>			&#125;<br>			mountedVolumes[mountedVolume.OuterVolumeSpecName] = mountedVolume<br>		&#125;<br>	&#125;<br> <br>	processedVolumesForFSResize := sets.NewString()<br>	<span class="hljs-keyword">for</span> _, pod := <span class="hljs-keyword">range</span> dswp.podManager.GetPods() &#123;<br>		<span class="hljs-keyword">if</span> dswp.isPodTerminated(pod) &#123;<br>			<span class="hljs-comment">// Do not (re)add volumes for terminated pods</span><br>			<span class="hljs-keyword">continue</span><br>		&#125;<br>		dswp.processPodVolumes(pod, mountedVolumesForPod, processedVolumesForFSResize)<br>	&#125;<br>&#125;<br></code></pre></td></tr></table></figure>
+
+<h6 id="dswp-processPodVolumes"><a href="#dswp-processPodVolumes" class="headerlink" title="dswp.processPodVolumes()"></a>dswp.processPodVolumes()</h6><ul>
+<li><p>如果volume已经在processedPod map中，无需处理:</p>
+<figure class="highlight go"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br></pre></td><td class="code"><pre><code class="hljs go">uniquePodName := util.GetUniquePodName(pod)<br>	<span class="hljs-keyword">if</span> dswp.podPreviouslyProcessed(uniquePodName) &#123;<br>		<span class="hljs-keyword">return</span><br>&#125;<br></code></pre></td></tr></table></figure></li>
+<li><p>对pod 下所有容器下的volumeDevice和volumeMounts加入processedPods map中:</p>
+<figure class="highlight go"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br><span class="line">7</span><br><span class="line">8</span><br><span class="line">9</span><br><span class="line">10</span><br><span class="line">11</span><br><span class="line">12</span><br><span class="line">13</span><br><span class="line">14</span><br><span class="line">15</span><br><span class="line">16</span><br><span class="line">17</span><br><span class="line">18</span><br><span class="line">19</span><br><span class="line">20</span><br><span class="line">21</span><br><span class="line">22</span><br><span class="line">23</span><br><span class="line">24</span><br><span class="line">25</span><br><span class="line">26</span><br><span class="line">27</span><br><span class="line">28</span><br></pre></td><td class="code"><pre><code class="hljs go">volumeDevices    &lt;[]Object&gt;<br>  volumeDevices is the list of block devices to be used by the container.<br>  This is an alpha feature and may change in the future.<br><br>volumeMounts    &lt;[]Object&gt;<br>  Pod volumes to mount into the container<span class="hljs-string">&#x27;s filesystem. Cannot be updated.</span><br><span class="hljs-string">     </span><br><span class="hljs-string">func (dswp *desiredStateOfWorldPopulator) makeVolumeMap(containers []v1.Container) (map[string]bool, map[string]bool) &#123;</span><br><span class="hljs-string">	volumeDevicesMap := make(map[string]bool)</span><br><span class="hljs-string">	volumeMountsMap := make(map[string]bool)</span><br><span class="hljs-string"> </span><br><span class="hljs-string">	for _, container := range containers &#123;</span><br><span class="hljs-string">		if container.VolumeMounts != nil &#123;</span><br><span class="hljs-string">			for _, mount := range container.VolumeMounts &#123;</span><br><span class="hljs-string">				volumeMountsMap[mount.Name] = true</span><br><span class="hljs-string">			&#125;</span><br><span class="hljs-string">		&#125;</span><br><span class="hljs-string">		// TODO: remove feature gate check after no longer needed</span><br><span class="hljs-string">		if utilfeature.DefaultFeatureGate.Enabled(features.BlockVolume) &amp;&amp;</span><br><span class="hljs-string">			container.VolumeDevices != nil &#123;</span><br><span class="hljs-string">			for _, device := range container.VolumeDevices &#123;</span><br><span class="hljs-string">				volumeDevicesMap[device.Name] = true</span><br><span class="hljs-string">			&#125;</span><br><span class="hljs-string">		&#125;</span><br><span class="hljs-string">	&#125;</span><br><span class="hljs-string"> </span><br><span class="hljs-string">	return volumeMountsMap, volumeDevicesMap</span><br><span class="hljs-string">&#125;</span><br></code></pre></td></tr></table></figure></li>
+<li><p>AddPodToVolume()</p>
+<ul>
+<li><p>调用FindPluginBySpec函数根据volume.spec找到volume plugin</p>
+<figure class="highlight go"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br><span class="line">7</span><br></pre></td><td class="code"><pre><code class="hljs go">volumePlugin, err := dsw.volumePluginMgr.FindPluginBySpec(volumeSpec)<br>	<span class="hljs-keyword">if</span> err != <span class="hljs-literal">nil</span> || volumePlugin == <span class="hljs-literal">nil</span> &#123;<br>		<span class="hljs-keyword">return</span> <span class="hljs-string">&quot;&quot;</span>, fmt.Errorf(<br>			<span class="hljs-string">&quot;failed to get Plugin from volumeSpec for volume %q err=%v&quot;</span>,<br>			volumeSpec.Name(),<br>			err)<br>	&#125;<br></code></pre></td></tr></table></figure></li>
+<li><p>isAttachableVolume()，检查插件是否需要attach：不是所有的插件都需要实现AttachableVolumePlugin接口</p>
+<figure class="highlight go"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br><span class="line">7</span><br><span class="line">8</span><br><span class="line">9</span><br><span class="line">10</span><br><span class="line">11</span><br><span class="line">12</span><br><span class="line">13</span><br><span class="line">14</span><br><span class="line">15</span><br><span class="line">16</span><br><span class="line">17</span><br><span class="line">18</span><br><span class="line">19</span><br><span class="line">20</span><br></pre></td><td class="code"><pre><code class="hljs go"><span class="hljs-comment">// The unique volume name used depends on whether the volume is attachable</span><br>	<span class="hljs-comment">// or not.</span><br>	attachable := dsw.isAttachableVolume(volumeSpec)<br>	<span class="hljs-keyword">if</span> attachable &#123;<br>		<span class="hljs-comment">// For attachable volumes, use the unique volume name as reported by</span><br>		<span class="hljs-comment">// the plugin.</span><br>		volumeName, err =<br>			util.GetUniqueVolumeNameFromSpec(volumePlugin, volumeSpec)<br>		<span class="hljs-keyword">if</span> err != <span class="hljs-literal">nil</span> &#123;<br>			<span class="hljs-keyword">return</span> <span class="hljs-string">&quot;&quot;</span>, fmt.Errorf(<br>				<span class="hljs-string">&quot;failed to GetUniqueVolumeNameFromSpec for volumeSpec %q using volume plugin %q err=%v&quot;</span>,<br>				volumeSpec.Name(),<br>				volumePlugin.GetPluginName(),<br>				err)<br>		&#125;<br>	&#125; <span class="hljs-keyword">else</span> &#123;<br>		<span class="hljs-comment">// For non-attachable volumes, generate a unique name based on the pod</span><br>		<span class="hljs-comment">// namespace and name and the name of the volume within the pod.</span><br>		volumeName = util.GetUniqueVolumeNameForNonAttachableVolume(podName, volumePlugin, volumeSpec)<br>	&#125;<br></code></pre></td></tr></table></figure></li>
+<li><p>记录volume与pod之间的关系到dsw</p>
+<figure class="highlight go"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br><span class="line">7</span><br><span class="line">8</span><br><span class="line">9</span><br><span class="line">10</span><br><span class="line">11</span><br><span class="line">12</span><br><span class="line">13</span><br><span class="line">14</span><br><span class="line">15</span><br><span class="line">16</span><br><span class="line">17</span><br><span class="line">18</span><br><span class="line">19</span><br><span class="line">20</span><br></pre></td><td class="code"><pre><code class="hljs go"><span class="hljs-keyword">if</span> _, volumeExists := dsw.volumesToMount[volumeName]; !volumeExists &#123;<br>		dsw.volumesToMount[volumeName] = volumeToMount&#123;<br>			volumeName:              volumeName,<br>			podsToMount:             <span class="hljs-built_in">make</span>(<span class="hljs-keyword">map</span>[types.UniquePodName]podToMount),<br>			pluginIsAttachable:      attachable,<br>			pluginIsDeviceMountable: deviceMountable,<br>			volumeGidValue:          volumeGidValue,<br>			reportedInUse:           <span class="hljs-literal">false</span>,<br>		&#125;<br>	&#125;<br> <br>	<span class="hljs-comment">// Create new podToMount object. If it already exists, it is refreshed with</span><br>	<span class="hljs-comment">// updated values (this is required for volumes that require remounting on</span><br>	<span class="hljs-comment">// pod update, like Downward API volumes).</span><br>	dsw.volumesToMount[volumeName].podsToMount[podName] = podToMount&#123;<br>		podName:             podName,<br>		pod:                 pod,<br>		volumeSpec:          volumeSpec,<br>		outerVolumeSpecName: outerVolumeSpecName,<br>	&#125;<br></code></pre></td></tr></table></figure></li>
+<li><p>对pod name标记为已处理，aws标记重新挂载</p>
+<figure class="highlight go"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br><span class="line">7</span><br></pre></td><td class="code"><pre><code class="hljs go"><span class="hljs-comment">// some of the volume additions may have failed, should not mark this pod as fully processed</span><br>	<span class="hljs-keyword">if</span> allVolumesAdded &#123;<br>		dswp.markPodProcessed(uniquePodName)<br>		<span class="hljs-comment">// New pod has been synced. Re-mount all volumes that need it</span><br>		<span class="hljs-comment">// (e.g. DownwardAPI)</span><br>		dswp.actualStateOfWorld.MarkRemountRequired(uniquePodName)<br>	&#125;<br></code></pre></td></tr></table></figure></li>
+</ul>
+</li>
+</ul>
+<h2 id="reconcile-Run"><a href="#reconcile-Run" class="headerlink" title="reconcile.Run()"></a>reconcile.Run()</h2><p><code>reconcile()</code>的实现逻辑如下：</p>
+<ul>
+<li><p>对于实际已经挂载的与预期不一样的需要unmount：UnmountVolume函数中处理，volume分为filesystem与block，在dsw不包括asw的情况需要unmount</p>
+<figure class="highlight go"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br><span class="line">7</span><br><span class="line">8</span><br><span class="line">9</span><br><span class="line">10</span><br><span class="line">11</span><br><span class="line">12</span><br><span class="line">13</span><br><span class="line">14</span><br><span class="line">15</span><br><span class="line">16</span><br><span class="line">17</span><br><span class="line">18</span><br><span class="line">19</span><br></pre></td><td class="code"><pre><code class="hljs Go"><span class="hljs-comment">// Ensure volumes that should be unmounted are unmounted.</span><br>	<span class="hljs-keyword">for</span> _, mountedVolume := <span class="hljs-keyword">range</span> rc.actualStateOfWorld.GetMountedVolumes() &#123;<br>		<span class="hljs-keyword">if</span> !rc.desiredStateOfWorld.PodExistsInVolume(mountedVolume.PodName, mountedVolume.VolumeName) &#123;<br>			<span class="hljs-comment">// Volume is mounted, unmount it</span><br>			glog.V(<span class="hljs-number">5</span>).Infof(mountedVolume.GenerateMsgDetailed(<span class="hljs-string">&quot;Starting operationExecutor.UnmountVolume&quot;</span>, <span class="hljs-string">&quot;&quot;</span>))<br>			err := rc.operationExecutor.UnmountVolume(<br>				mountedVolume.MountedVolume, rc.actualStateOfWorld, rc.kubeletPodsDir)<br>			<span class="hljs-keyword">if</span> err != <span class="hljs-literal">nil</span> &amp;&amp;<br>				!nestedpendingoperations.IsAlreadyExists(err) &amp;&amp;<br>				!exponentialbackoff.IsExponentialBackoff(err) &#123;<br>				<span class="hljs-comment">// Ignore nestedpendingoperations.IsAlreadyExists and exponentialbackoff.IsExponentialBackoff errors, they are expected.</span><br>				<span class="hljs-comment">// Log all other errors.</span><br>				glog.Errorf(mountedVolume.GenerateErrorDetailed(fmt.Sprintf(<span class="hljs-string">&quot;operationExecutor.UnmountVolume failed (controllerAttachDetachEnabled %v)&quot;</span>, rc.controllerAttachDetachEnabled), err).Error())<br>			&#125;<br>			<span class="hljs-keyword">if</span> err == <span class="hljs-literal">nil</span> &#123;<br>				glog.Infof(mountedVolume.GenerateMsgDetailed(<span class="hljs-string">&quot;operationExecutor.UnmountVolume started&quot;</span>, <span class="hljs-string">&quot;&quot;</span>))<br>			&#125;<br>		&#125;<br>	&#125;<br></code></pre></td></tr></table></figure></li>
+<li><p>从dsw数据结构中获取需要mount的volumes</p>
+<figure class="highlight go"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br></pre></td><td class="code"><pre><code class="hljs go"><span class="hljs-comment">// Ensure volumes that should be attached/mounted are attached/mounted.</span><br><span class="hljs-keyword">for</span> _, volumeToMount := <span class="hljs-keyword">range</span> rc.desiredStateOfWorld.GetVolumesToMount() &#123;<br>	volMounted, devicePath, err := rc.actualStateOfWorld.PodExistsInVolume(volumeToMount.PodName, volumeToMount.VolumeName)<br>	volumeToMount.DevicePath = devicePath<br></code></pre></td></tr></table></figure></li>
+<li><p>如果volume没有attach (err为volumeNotAttachedError)，查看actualStateOfWorld结构体中attachedVolumes没有volumeName，在则调用AttachVolume函数</p>
+</li>
+<li><p>如果volume没有mount或者error为remountRequiredError， 调用MountVolume函数</p>
+</li>
+<li><p>如果err为fsResizeRequiredError，调用ExpandVolumeFSWithoutUnmounting函数</p>
+</li>
+</ul>
+<h2 id="operationExecutor初始化"><a href="#operationExecutor初始化" class="headerlink" title="operationExecutor初始化"></a>operationExecutor初始化</h2><p>NewVolumeManager函數中初始化operationExecutor的函數爲NewOperationExecutor。operationExecuter根据不同的volume plugin生成mountvolume, attachvolume函数，供reconcile调用。</p>
+<figure class="highlight go"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br><span class="line">7</span><br><span class="line">8</span><br><span class="line">9</span><br><span class="line">10</span><br><span class="line">11</span><br><span class="line">12</span><br><span class="line">13</span><br><span class="line">14</span><br><span class="line">15</span><br><span class="line">16</span><br><span class="line">17</span><br><span class="line">18</span><br><span class="line">19</span><br></pre></td><td class="code"><pre><code class="hljs go"><br>		operationExecutor: operationexecutor.NewOperationExecutor(operationexecutor.NewOperationGenerator(<br>			kubeClient,<br>			volumePluginMgr,<br>			recorder,<br>			checkNodeCapabilitiesBeforeMount,<br>			volumepathhandler.NewBlockVolumePathHandler())),<br> <br> <br><span class="hljs-comment">// NewOperationExecutor returns a new instance of OperationExecutor.</span><br><span class="hljs-function"><span class="hljs-keyword">func</span> <span class="hljs-title">NewOperationExecutor</span><span class="hljs-params">(</span></span><br><span class="hljs-params"><span class="hljs-function">	operationGenerator OperationGenerator)</span> <span class="hljs-title">OperationExecutor</span></span> &#123;<br> <br>	<span class="hljs-keyword">return</span> &amp;operationExecutor&#123;<br>		pendingOperations: nestedpendingoperations.NewNestedPendingOperations(<br>			<span class="hljs-literal">true</span> <span class="hljs-comment">/* exponentialBackOffOnError */</span>),<br>		operationGenerator: operationGenerator,<br>	&#125;<br>&#125;<br></code></pre></td></tr></table></figure>
+
+<h2 id="SyncPod"><a href="#SyncPod" class="headerlink" title="SyncPod()"></a>SyncPod()</h2><p>  同步 pod 时，等待 pod attach 和 mount 完成</p>
+<figure class="highlight go"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br><span class="line">7</span><br><span class="line">8</span><br><span class="line">9</span><br></pre></td><td class="code"><pre><code class="hljs Go"><span class="hljs-comment">// Volume manager will not mount volumes for terminated pods</span><br><span class="hljs-keyword">if</span> !kl.podIsTerminated(pod) &#123;<br>	<span class="hljs-comment">// Wait for volumes to attach/mount</span><br>	<span class="hljs-keyword">if</span> err := kl.volumeManager.WaitForAttachAndMount(pod); err != <span class="hljs-literal">nil</span> &#123;<br>		kl.recorder.Eventf(pod, v1.EventTypeWarning, events.FailedMountVolume, <span class="hljs-string">&quot;Unable to mount volumes for pod %q: %v&quot;</span>, format.Pod(pod), err)<br>		klog.Errorf(<span class="hljs-string">&quot;Unable to mount volumes for pod %q: %v; skipping pod&quot;</span>, format.Pod(pod), err)<br>		<span class="hljs-keyword">return</span> err<br>	&#125;<br>&#125;<br></code></pre></td></tr></table></figure>
+
+<h3 id="WaitForAttachAndMount"><a href="#WaitForAttachAndMount" class="headerlink" title="WaitForAttachAndMount()"></a>WaitForAttachAndMount()</h3><p> 获取 pod 所有的 volume </p>
+<figure class="highlight go"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br><span class="line">7</span><br><span class="line">8</span><br><span class="line">9</span><br><span class="line">10</span><br></pre></td><td class="code"><pre><code class="hljs go"><span class="hljs-function"><span class="hljs-keyword">func</span> <span class="hljs-params">(vm *volumeManager)</span> <span class="hljs-title">WaitForAttachAndMount</span><span class="hljs-params">(pod *v1.Pod)</span> <span class="hljs-title">error</span></span> &#123;<br>	<span class="hljs-keyword">if</span> pod == <span class="hljs-literal">nil</span> &#123;<br>		<span class="hljs-keyword">return</span> <span class="hljs-literal">nil</span><br>	&#125;<br> <br>	expectedVolumes := getExpectedVolumes(pod)<br>	<span class="hljs-keyword">if</span> <span class="hljs-built_in">len</span>(expectedVolumes) == <span class="hljs-number">0</span> &#123;<br>		<span class="hljs-comment">// No volumes to verify</span><br>		<span class="hljs-keyword">return</span> <span class="hljs-literal">nil</span><br>	&#125;<br></code></pre></td></tr></table></figure>
+
+<h3 id="verifyVolumesMountedFunc"><a href="#verifyVolumesMountedFunc" class="headerlink" title="verifyVolumesMountedFunc()"></a>verifyVolumesMountedFunc()</h3><p>   没有被 mount 的volume 数量为0，表示成功完成挂载</p>
+<figure class="highlight go"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br><span class="line">7</span><br></pre></td><td class="code"><pre><code class="hljs Go"><span class="hljs-comment">// verifyVolumesMountedFunc returns a method that returns true when all expected</span><br><span class="hljs-comment">// volumes are mounted.</span><br><span class="hljs-function"><span class="hljs-keyword">func</span> <span class="hljs-params">(vm *volumeManager)</span> <span class="hljs-title">verifyVolumesMountedFunc</span><span class="hljs-params">(podName types.UniquePodName, expectedVolumes []<span class="hljs-keyword">string</span>)</span> <span class="hljs-title">wait</span>.<span class="hljs-title">ConditionFunc</span></span> &#123;<br>	<span class="hljs-keyword">return</span> <span class="hljs-function"><span class="hljs-keyword">func</span><span class="hljs-params">()</span> <span class="hljs-params">(done <span class="hljs-keyword">bool</span>, err error)</span></span> &#123;<br>		<span class="hljs-keyword">return</span> <span class="hljs-built_in">len</span>(vm.getUnmountedVolumes(podName, expectedVolumes)) == <span class="hljs-number">0</span>, <span class="hljs-literal">nil</span><br>	&#125;<br>&#125;<br></code></pre></td></tr></table></figure>
+
+
+
+<h1 id="参考"><a href="#参考" class="headerlink" title="参考"></a>参考</h1><p><a target="_blank" rel="noopener" href="https://blog.csdn.net/zhonglinzhang/article/details/82800287">https://blog.csdn.net/zhonglinzhang/article/details/82800287</a></p>
+
+            </div>
+            <hr>
+            <div>
+              <div class="post-metas mb-3">
+                
+                  <div class="post-meta mr-3">
+                    <i class="iconfont icon-category"></i>
+                    
+                      <a class="hover-with-bg" href="/categories/%E4%B8%93%E4%B8%9A/">专业</a>
+                    
+                      <a class="hover-with-bg" href="/categories/%E4%B8%93%E4%B8%9A/%E5%BC%80%E5%8F%91/">开发</a>
+                    
+                      <a class="hover-with-bg" href="/categories/%E4%B8%93%E4%B8%9A/%E5%BC%80%E5%8F%91/Kubernetes/">Kubernetes</a>
+                    
+                  </div>
+                
+                
+                  <div class="post-meta">
+                    <i class="iconfont icon-tags"></i>
+                    
+                      <a class="hover-with-bg" href="/tags/Kubernetes/">Kubernetes</a>
+                    
+                      <a class="hover-with-bg" href="/tags/golang/">golang</a>
+                    
+                      <a class="hover-with-bg" href="/tags/%E4%BA%91%E5%8E%9F%E7%94%9F/">云原生</a>
+                    
+                  </div>
+                
+              </div>
+              
+                <p class="note note-warning">
+                  
+                    本博客所有文章除特别声明外，均采用 <a target="_blank" href="https://creativecommons.org/licenses/by-sa/4.0/deed.zh" rel="nofollow noopener noopener">CC BY-SA 4.0 协议</a> ，转载请注明出处！
+                  
+                </p>
+              
+              
+                <div class="post-prevnext">
+                  <article class="post-prev col-6">
+                    
+                    
+                      <a href="/2021/10/13/print-even-and-odd-numbers-in-two-goroutines/">
+                        <i class="iconfont icon-arrowleft"></i>
+                        <span class="hidden-mobile">两个goroutine交叉打印奇偶数字</span>
+                        <span class="visible-mobile">上一篇</span>
+                      </a>
+                    
+                  </article>
+                  <article class="post-next col-6">
+                    
+                    
+                  </article>
+                </div>
+              
+            </div>
+
+            
+          </article>
+        </div>
+      </div>
+    </div>
+    
+      <div class="d-none d-lg-block col-lg-2 toc-container" id="toc-ctn">
+        <div id="toc">
+  <p class="toc-header"><i class="iconfont icon-list"></i>&nbsp;目录</p>
+  <div class="toc-body" id="toc-body"></div>
+</div>
+
+      </div>
+    
+  </div>
+</div>
+
+<!-- Custom -->
+
+
+    
+
+    
+      <a id="scroll-top-button" aria-label="TOP" href="#" role="button">
+        <i class="iconfont icon-arrowup" aria-hidden="true"></i>
+      </a>
+    
+
+    
+      <div class="modal fade" id="modalSearch" tabindex="-1" role="dialog" aria-labelledby="ModalLabel"
+     aria-hidden="true">
+  <div class="modal-dialog modal-dialog-scrollable modal-lg" role="document">
+    <div class="modal-content">
+      <div class="modal-header text-center">
+        <h4 class="modal-title w-100 font-weight-bold">搜索</h4>
+        <button type="button" id="local-search-close" class="close" data-dismiss="modal" aria-label="Close">
+          <span aria-hidden="true">&times;</span>
+        </button>
+      </div>
+      <div class="modal-body mx-3">
+        <div class="md-form mb-5">
+          <input type="text" id="local-search-input" class="form-control validate">
+          <label data-error="x" data-success="v"
+                 for="local-search-input">关键词</label>
+        </div>
+        <div class="list-group" id="local-search-result"></div>
+      </div>
+    </div>
+  </div>
+</div>
+    
+
+    
+  </main>
+
+  <footer class="text-center mt-5 py-3">
+  <div class="footer-content">
+     <a href="https://hexo.io" target="_blank" rel="nofollow noopener"><span>Hexo</span></a> <i class="iconfont icon-love"></i> <a href="https://github.com/fluid-dev/hexo-theme-fluid" target="_blank" rel="nofollow noopener"><span>Fluid</span></a> 
+  </div>
+  
+
+  
+
+  
+</footer>
+
+
+  <!-- SCRIPTS -->
+  
+  <script  src="https://cdn.jsdelivr.net/npm/nprogress@0/nprogress.min.js" ></script>
+  <link  rel="stylesheet" href="https://cdn.jsdelivr.net/npm/nprogress@0/nprogress.min.css" />
+
+  <script>
+    NProgress.configure({"showSpinner":false,"trickleSpeed":100})
+    NProgress.start()
+    window.addEventListener('load', function() {
+      NProgress.done();
+    })
+  </script>
+
+
+<script  src="https://cdn.jsdelivr.net/npm/jquery@3/dist/jquery.min.js" ></script>
+<script  src="https://cdn.jsdelivr.net/npm/bootstrap@4/dist/js/bootstrap.min.js" ></script>
+<script  src="/js/events.js" ></script>
+<script  src="/js/plugins.js" ></script>
+
+<!-- Plugins -->
+
+
+  <script  src="/js/local-search.js" ></script>
+
+
+
+  
+    <script  src="/js/img-lazyload.js" ></script>
+  
+
+
+
+  
+
+
+
+  
+    <script  src="https://cdn.jsdelivr.net/npm/tocbot@4/dist/tocbot.min.js" ></script>
+  
+  
+    <script  src="https://cdn.jsdelivr.net/npm/@fancyapps/fancybox@3/dist/jquery.fancybox.min.js" ></script>
+  
+  
+    <script  src="https://cdn.jsdelivr.net/npm/anchor-js@4/anchor.min.js" ></script>
+  
+  
+    <script defer src="https://cdn.jsdelivr.net/npm/clipboard@2/dist/clipboard.min.js" ></script>
+  
+
+
+
+
+
+
+  <script  src="https://cdn.jsdelivr.net/npm/typed.js@2/lib/typed.min.js" ></script>
+  <script>
+    (function (window, document) {
+      var typing = Fluid.plugins.typing;
+      var title = document.getElementById('subtitle').title;
+      
+      typing(title)
+      
+    })(window, document);
+  </script>
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+<!-- 主题的启动项 保持在最底部 -->
+<script  src="/js/boot.js" ></script>
+
+
+</body>
+</html>
