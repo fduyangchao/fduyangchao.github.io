@@ -2,6 +2,41 @@
 <urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9">
   
   <url>
+    <loc>https://fduyangcaho.github.io/2021/11/26/dmsetup-delete-deivce-busy/</loc>
+    
+    <lastmod>2021-11-25</lastmod>
+    
+  </url>
+  
+  <url>
+    <loc>https://fduyangcaho.github.io/2021/11/26/git-proxy-configuration/</loc>
+    
+    <lastmod>2021-11-25</lastmod>
+    
+  </url>
+  
+  <url>
+    <loc>https://fduyangcaho.github.io/2021/11/03/plantUML/</loc>
+    
+    <lastmod>2021-11-25</lastmod>
+    
+  </url>
+  
+  <url>
+    <loc>https://fduyangcaho.github.io/2021/11/04/resource-package/</loc>
+    
+    <lastmod>2021-11-25</lastmod>
+    
+  </url>
+  
+  <url>
+    <loc>https://fduyangcaho.github.io/2021/10/14/container-permissions-management-in-k8s/</loc>
+    
+    <lastmod>2021-11-25</lastmod>
+    
+  </url>
+  
+  <url>
     <loc>https://fduyangcaho.github.io/2021/10/13/print-even-and-odd-numbers-in-two-goroutines/</loc>
     
     <lastmod>2021-11-25</lastmod>
@@ -10,13 +45,6 @@
   
   <url>
     <loc>https://fduyangcaho.github.io/2021/10/12/volume-manager-source-code-analysis/</loc>
-    
-    <lastmod>2021-11-24</lastmod>
-    
-  </url>
-  
-  <url>
-    <loc>https://fduyangcaho.github.io/2021/11/04/resource-package/</loc>
     
     <lastmod>2021-11-24</lastmod>
     
@@ -38,34 +66,6 @@
   
   <url>
     <loc>https://fduyangcaho.github.io/categories/index.html</loc>
-    
-    <lastmod>2021-11-24</lastmod>
-    
-  </url>
-  
-  <url>
-    <loc>https://fduyangcaho.github.io/2021/11/24/git-proxy-configuration/</loc>
-    
-    <lastmod>2021-11-24</lastmod>
-    
-  </url>
-  
-  <url>
-    <loc>https://fduyangcaho.github.io/2021/11/03/plantUML/</loc>
-    
-    <lastmod>2021-11-24</lastmod>
-    
-  </url>
-  
-  <url>
-    <loc>https://fduyangcaho.github.io/2021/10/14/container-permissions-management-in-k8s/</loc>
-    
-    <lastmod>2021-11-24</lastmod>
-    
-  </url>
-  
-  <url>
-    <loc>https://fduyangcaho.github.io/2021/11/24/dmsetup-delete-deivce-busy/</loc>
     
     <lastmod>2021-11-24</lastmod>
     
@@ -165,14 +165,14 @@
   </url>
   
   <url>
-    <loc>https://fduyangcaho.github.io/tags/resource/</loc>
+    <loc>https://fduyangcaho.github.io/tags/%E7%AE%97%E6%B3%95/</loc>
     <lastmod>2021-11-25</lastmod>
     <changefreq>daily</changefreq>
     <priority>0.6</priority>
   </url>
   
   <url>
-    <loc>https://fduyangcaho.github.io/tags/%E7%AE%97%E6%B3%95/</loc>
+    <loc>https://fduyangcaho.github.io/tags/resource/</loc>
     <lastmod>2021-11-25</lastmod>
     <changefreq>daily</changefreq>
     <priority>0.6</priority>
