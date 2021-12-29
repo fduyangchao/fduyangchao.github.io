@@ -5,58 +5,52 @@
     <url>/2021/10/14/container-permissions-management-in-k8s/</url>
     <content><![CDATA[<p>开源项目部署后，如果升级镜像版本，有时会出现容器内部权限不足，导致业务进程无法读写文件。本文从容器和文件系统两个角度出发，总结容器镜像和Kubernetes如何控制并配置业务权限。</p>
 <span id="more"></span>
-
 <p>Pod权限管理可以分为两类：1. 容器内进程所属的用户和组 2. 容器文件系统所属的用户和组。当且仅当容器进程用户为<code>root:root</code>，或者与文件系统用户相同时，才拥有对文件的读写权限。</p>
 <p>如果不配置任何用户组，容器进程和文件系统默认为root用户组。下面做一个简单的demo，起一个alpine容器，将宿主机的<code>/tmp/mnt</code>目录挂载到Pod的<code>/mnt</code>目录，不做任何权限配置。</p>
 <figure class="highlight yaml"><table><tr><td class="code"><pre><code class="hljs yaml"><span class="hljs-attr">apiVersion:</span> <span class="hljs-string">v1</span><br><span class="hljs-attr">kind:</span> <span class="hljs-string">Pod</span><br><span class="hljs-attr">metadata:</span><br>  <span class="hljs-attr">name:</span> <span class="hljs-string">demo</span><br><span class="hljs-attr">spec:</span><br>  <span class="hljs-attr">containers:</span><br>  <span class="hljs-bullet">-</span> <span class="hljs-attr">args:</span><br>    <span class="hljs-bullet">-</span> <span class="hljs-string">-c</span><br>    <span class="hljs-bullet">-</span> <span class="hljs-string">sleep</span> <span class="hljs-number">36000000</span><br>    <span class="hljs-attr">command:</span><br>    <span class="hljs-bullet">-</span> <span class="hljs-string">/bin/sh</span><br>    <span class="hljs-attr">image:</span> <span class="hljs-string">alpine:latest</span><br>    <span class="hljs-attr">imagePullPolicy:</span> <span class="hljs-string">IfNotPresent</span><br>    <span class="hljs-attr">name:</span> <span class="hljs-string">container</span><br>    <span class="hljs-attr">volumeMounts:</span><br>    <span class="hljs-bullet">-</span> <span class="hljs-attr">mountPath:</span> <span class="hljs-string">/mnt</span><br>      <span class="hljs-attr">name:</span> <span class="hljs-string">mnt</span><br>  <span class="hljs-attr">volumes:</span><br>  <span class="hljs-bullet">-</span> <span class="hljs-attr">name:</span> <span class="hljs-string">mnt</span><br>    <span class="hljs-attr">hostPath:</span><br>      <span class="hljs-attr">path:</span> <span class="hljs-string">/tmp/mnt</span><br>      <span class="hljs-attr">type:</span> <span class="hljs-string">DirectoryOrCreate</span><br></code></pre></td></tr></table></figure>
-
 <p>进入容器内部查看，容器进程、文件系统的用户组均为<code>root:root</code></p>
 <figure class="highlight tap"><table><tr><td class="code"><pre><code class="hljs tap">[root@laptop]<span class="hljs-comment"># kubectl exec -it demo sh</span><br>kubectl exec [POD] [COMMAND] is DEPRECATED and will be removed in a future version. Use kubectl exec [POD] -- [COMMAND] instead.<br>/ <span class="hljs-comment"># </span><br>/ <span class="hljs-comment"># whoami</span><br>root<br>/ <span class="hljs-comment"># </span><br>/ <span class="hljs-comment"># ls -atl /mnt</span><br>total 0<br>drwxr-xr-x   <span class="hljs-number"> 2 </span>root     root            <span class="hljs-number"> 6 </span>Oct<span class="hljs-number"> 15 </span>08:05 .<br>drwxr-xr-x   <span class="hljs-number"> 1 </span>root     root           <span class="hljs-number"> 29 </span>Oct<span class="hljs-number"> 15 </span>08:05 ..<br>/ <span class="hljs-comment"># </span><br>/ <span class="hljs-comment"># ps ef</span><br>PID   USER     TIME  COMMAND<br>   <span class="hljs-number"> 1 </span>root      0:00 sleep 36000000<br>  <span class="hljs-number"> 14 </span>root      0:00 sh<br>  <span class="hljs-number"> 21 </span>root      0:00 ps ef<br><br></code></pre></td></tr></table></figure>
-
-<h2 id="如何设置容器进程的uid-gid"><a href="#如何设置容器进程的uid-gid" class="headerlink" title="如何设置容器进程的uid/gid"></a>如何设置容器进程的uid/gid</h2><h3 id="Dockerfile定义"><a href="#Dockerfile定义" class="headerlink" title="Dockerfile定义"></a>Dockerfile定义</h3><figure class="highlight routeros"><table><tr><td class="code"><pre><code class="hljs routeros"><span class="hljs-keyword">FROM</span> alpine:latest<br><span class="hljs-builtin-name">RUN</span> addgroup -g 1001 -S appuser &amp;&amp; adduser -u 1001 -S appuser -G appuser<span class="hljs-built_in"></span><br><span class="hljs-built_in">USER </span>appuser<br></code></pre></td></tr></table></figure>
-
-<h3 id="PodSecurityContext"><a href="#PodSecurityContext" class="headerlink" title="PodSecurityContext"></a>PodSecurityContext</h3><p>Pod <code>spec.securityContext</code>定义<code>runAsUser</code>, <code>runAsGroup</code>，比Dockerfile优先级更高</p>
+<h2 id="如何设置容器进程的uidgid">如何设置容器进程的uid/gid</h2>
+<h3 id="dockerfile定义">Dockerfile定义</h3>
+<figure class="highlight routeros"><table><tr><td class="code"><pre><code class="hljs routeros"><span class="hljs-keyword">FROM</span> alpine:latest<br><span class="hljs-builtin-name">RUN</span> addgroup -g 1001 -S appuser &amp;&amp; adduser -u 1001 -S appuser -G appuser<span class="hljs-built_in"></span><br><span class="hljs-built_in">USER </span>appuser<br></code></pre></td></tr></table></figure>
+<h3 id="podsecuritycontext">PodSecurityContext</h3>
+<p>Pod <code>spec.securityContext</code>定义<code>runAsUser</code>, <code>runAsGroup</code>，比Dockerfile优先级更高</p>
 <figure class="highlight yaml"><table><tr><td class="code"><pre><code class="hljs yaml"><span class="hljs-attr">apiVersion:</span> <span class="hljs-string">v1</span><br><span class="hljs-attr">kind:</span> <span class="hljs-string">Pod</span><br><span class="hljs-attr">metadata:</span><br>  <span class="hljs-attr">name:</span> <span class="hljs-string">demo</span><br><span class="hljs-attr">spec:</span><br>  <span class="hljs-attr">securityContext:</span><br>    <span class="hljs-attr">runAsUser:</span> <span class="hljs-number">1001</span><br>    <span class="hljs-attr">runAsGroup:</span> <span class="hljs-number">1001</span><br>  <span class="hljs-attr">containers:</span><br>  <span class="hljs-bullet">-</span> <span class="hljs-attr">args:</span><br>    <span class="hljs-bullet">-</span> <span class="hljs-string">-c</span><br>    <span class="hljs-bullet">-</span> <span class="hljs-string">sleep</span> <span class="hljs-number">36000000</span><br>    <span class="hljs-attr">command:</span><br>    <span class="hljs-bullet">-</span> <span class="hljs-string">/bin/sh</span><br>    <span class="hljs-attr">image:</span> <span class="hljs-string">alpine:latest</span><br>    <span class="hljs-attr">imagePullPolicy:</span> <span class="hljs-string">IfNotPresent</span><br>    <span class="hljs-attr">name:</span> <span class="hljs-string">container</span><br>    <span class="hljs-attr">volumeMounts:</span><br>    <span class="hljs-bullet">-</span> <span class="hljs-attr">mountPath:</span> <span class="hljs-string">/mnt</span><br>      <span class="hljs-attr">name:</span> <span class="hljs-string">mnt</span><br>  <span class="hljs-attr">volumes:</span><br>  <span class="hljs-bullet">-</span> <span class="hljs-attr">name:</span> <span class="hljs-string">mnt</span><br>    <span class="hljs-attr">hostPath:</span><br>      <span class="hljs-attr">path:</span> <span class="hljs-string">/tmp/mnt</span><br>      <span class="hljs-attr">type:</span> <span class="hljs-string">DirectoryOrCreate</span><br></code></pre></td></tr></table></figure>
-
-<h3 id="SecurityContext"><a href="#SecurityContext" class="headerlink" title="SecurityContext"></a>SecurityContext</h3><p>Container <code>securityContext</code>也可定义<code>runAsUser</code>, <code>runAsGroup</code>，比Pod <code>securityContext</code>优先级更高</p>
+<h3 id="securitycontext">SecurityContext</h3>
+<p>Container <code>securityContext</code>也可定义<code>runAsUser</code>, <code>runAsGroup</code>，比Pod <code>securityContext</code>优先级更高</p>
 <figure class="highlight yaml"><table><tr><td class="code"><pre><code class="hljs yaml"><span class="hljs-attr">apiVersion:</span> <span class="hljs-string">v1</span><br><span class="hljs-attr">kind:</span> <span class="hljs-string">Pod</span><br><span class="hljs-attr">metadata:</span><br>  <span class="hljs-attr">name:</span> <span class="hljs-string">demo</span><br><span class="hljs-attr">spec:</span><br>  <span class="hljs-attr">securityContext:</span><br>    <span class="hljs-attr">runAsUser:</span> <span class="hljs-number">1001</span><br>    <span class="hljs-attr">runAsGroup:</span> <span class="hljs-number">1001</span><br>  <span class="hljs-attr">containers:</span><br>  <span class="hljs-bullet">-</span> <span class="hljs-attr">args:</span><br>    <span class="hljs-bullet">-</span> <span class="hljs-string">-c</span><br>    <span class="hljs-bullet">-</span> <span class="hljs-string">sleep</span> <span class="hljs-number">36000000</span><br>    <span class="hljs-attr">command:</span><br>    <span class="hljs-bullet">-</span> <span class="hljs-string">/bin/sh</span><br>    <span class="hljs-attr">image:</span> <span class="hljs-string">alpine:latest</span><br>    <span class="hljs-attr">imagePullPolicy:</span> <span class="hljs-string">IfNotPresent</span><br>    <span class="hljs-attr">name:</span> <span class="hljs-string">container</span><br>    <span class="hljs-attr">volumeMounts:</span><br>    <span class="hljs-bullet">-</span> <span class="hljs-attr">mountPath:</span> <span class="hljs-string">/mnt</span><br>      <span class="hljs-attr">name:</span> <span class="hljs-string">mnt</span><br>    <span class="hljs-attr">securityContext:</span><br>      <span class="hljs-attr">runAsUser:</span> <span class="hljs-number">2000</span>    <span class="hljs-string">&lt;------------</span> <span class="hljs-string">以这个配置为准</span><br>      <span class="hljs-attr">runAsGroup:</span> <span class="hljs-number">2000</span><br>  <span class="hljs-attr">volumes:</span><br>  <span class="hljs-bullet">-</span> <span class="hljs-attr">name:</span> <span class="hljs-string">mnt</span><br>    <span class="hljs-attr">hostPath:</span><br>      <span class="hljs-attr">path:</span> <span class="hljs-string">/tmp/mnt</span><br>      <span class="hljs-attr">type:</span> <span class="hljs-string">DirectoryOrCreate</span><br></code></pre></td></tr></table></figure>
-
-
-
-<h2 id="如何设置Pod文件系统的uid-gid"><a href="#如何设置Pod文件系统的uid-gid" class="headerlink" title="如何设置Pod文件系统的uid/gid"></a>如何设置Pod文件系统的uid/gid</h2><h3 id="Dockerfile定义-1"><a href="#Dockerfile定义-1" class="headerlink" title="Dockerfile定义"></a>Dockerfile定义</h3><figure class="highlight routeros"><table><tr><td class="code"><pre><code class="hljs routeros"><span class="hljs-keyword">FROM</span> alpine:latest<br><span class="hljs-builtin-name">RUN</span> addgroup -g 1001 -S appuser &amp;&amp; adduser -u 1001 -S appuser -G appuser<br><span class="hljs-builtin-name">RUN</span> chown -R 1001:1001 /mnt<br></code></pre></td></tr></table></figure>
-
-<h3 id="PosSecurityContext"><a href="#PosSecurityContext" class="headerlink" title="PosSecurityContext"></a>PosSecurityContext</h3><p>自定义pod <code>spec.securityContext.fsGroup</code>，当容器进程权限 &gt;= fsGroup权限才可以对挂载的存储卷进行读写操作。</p>
+<h2 id="如何设置pod文件系统的uidgid">如何设置Pod文件系统的uid/gid</h2>
+<h3 id="dockerfile定义-1">Dockerfile定义</h3>
+<figure class="highlight routeros"><table><tr><td class="code"><pre><code class="hljs routeros"><span class="hljs-keyword">FROM</span> alpine:latest<br><span class="hljs-builtin-name">RUN</span> addgroup -g 1001 -S appuser &amp;&amp; adduser -u 1001 -S appuser -G appuser<br><span class="hljs-builtin-name">RUN</span> chown -R 1001:1001 /mnt<br></code></pre></td></tr></table></figure>
+<h3 id="possecuritycontext">PosSecurityContext</h3>
+<p>自定义pod <code>spec.securityContext.fsGroup</code>，当容器进程权限 &gt;= fsGroup权限才可以对挂载的存储卷进行读写操作。</p>
 <p>按照Kubernetes官方文档的说法：由于设置了<code>fsGroup</code>，容器中所有进程也会是补充组ID 2000的一部分；存储卷挂载路径<code>/mnt</code>和在该路径中创建的任何文件都属于组ID 2000，因此容器进程有读写挂载存储卷的权利。但是实际验证下来，发现hostPath目录属于<code>root:root</code>，而不是设置的<code>fsGroup</code>，导致容器进程无法对<code>hostPath</code>挂载的路径<code>/mnt</code>进行读写操作。</p>
 <p>查看官方文档和自测用例的区别，发现官方文档使用<code>emptyDir</code>，自测用例使用的是<code>hostPath</code>，可能是两种存储插件的权限管理有区别？下面定义Pod挂载<code>hostPath</code>和<code>emptyDir</code>两种类型的存储卷，并设置<code>fsGroup=2000</code>，验证二者是否存在差别。</p>
 <figure class="highlight yaml"><table><tr><td class="code"><pre><code class="hljs yaml"><span class="hljs-attr">apiVersion:</span> <span class="hljs-string">v1</span><br><span class="hljs-attr">kind:</span> <span class="hljs-string">Pod</span><br><span class="hljs-attr">metadata:</span><br>  <span class="hljs-attr">name:</span> <span class="hljs-string">demo</span><br><span class="hljs-attr">spec:</span><br>  <span class="hljs-attr">securityContext:</span><br>    <span class="hljs-attr">runAsUser:</span> <span class="hljs-number">1001</span><br>    <span class="hljs-attr">runAsGroup:</span> <span class="hljs-number">1001</span><br>    <span class="hljs-attr">fsGroup:</span> <span class="hljs-number">2000</span><br>  <span class="hljs-attr">containers:</span><br>  <span class="hljs-bullet">-</span> <span class="hljs-attr">args:</span><br>    <span class="hljs-bullet">-</span> <span class="hljs-string">-c</span><br>    <span class="hljs-bullet">-</span> <span class="hljs-string">sleep</span> <span class="hljs-number">36000000</span><br>    <span class="hljs-attr">command:</span><br>    <span class="hljs-bullet">-</span> <span class="hljs-string">/bin/sh</span><br>    <span class="hljs-attr">image:</span> <span class="hljs-string">alpine:latest</span><br>    <span class="hljs-attr">imagePullPolicy:</span> <span class="hljs-string">IfNotPresent</span><br>    <span class="hljs-attr">name:</span> <span class="hljs-string">container</span><br>    <span class="hljs-attr">volumeMounts:</span><br>    <span class="hljs-bullet">-</span> <span class="hljs-attr">mountPath:</span> <span class="hljs-string">/mnt</span><br>      <span class="hljs-attr">name:</span> <span class="hljs-string">mnt</span><br>    <span class="hljs-bullet">-</span> <span class="hljs-attr">mountPath:</span> <span class="hljs-string">/emptydir</span><br>      <span class="hljs-attr">name:</span> <span class="hljs-string">emptydir</span><br>  <span class="hljs-attr">nodeSelector:</span><br>    <span class="hljs-attr">kubernetes.io/hostname:</span> <span class="hljs-string">tos055</span><br>  <span class="hljs-attr">volumes:</span><br>  <span class="hljs-bullet">-</span> <span class="hljs-attr">name:</span> <span class="hljs-string">mnt</span><br>    <span class="hljs-attr">hostPath:</span><br>      <span class="hljs-attr">path:</span> <span class="hljs-string">/tmp/mnt</span><br>      <span class="hljs-attr">type:</span> <span class="hljs-string">DirectoryOrCreate</span><br>  <span class="hljs-bullet">-</span> <span class="hljs-attr">name:</span> <span class="hljs-string">emptydir</span><br>    <span class="hljs-attr">emptyDir:</span> &#123;&#125;<br></code></pre></td></tr></table></figure>
-
 <p>进入容器内部查看容器进程所属<code>uid/gid/group</code>，以及挂载路径的<code>gid</code>：</p>
 <figure class="highlight tap"><table><tr><td class="code"><pre><code class="hljs tap">[root@laptop]<span class="hljs-comment"># kubectl exec -it demo sh</span><br>kubectl exec [POD] [COMMAND] is DEPRECATED and will be removed in a future version. Use kubectl exec [POD] -- [COMMAND] instead.<br>/ $ <br>/ $ id<br>uid=1001 gid=1001 groups=2000<br>/ $ <br>/ $ ls -l <br>total 8<br>drwxr-xr-x   <span class="hljs-number"> 2 </span>root     root         <span class="hljs-number"> 4096 </span>Aug<span class="hljs-number"> 27 </span>11:05 bin<br>drwxr-xr-x   <span class="hljs-number"> 5 </span>root     root          <span class="hljs-number"> 360 </span>Oct<span class="hljs-number"> 15 </span>08:36 dev<br>drwxrwsrwx   <span class="hljs-number"> 2 </span>root    <span class="hljs-number"> 2000 </span>          <span class="hljs-number"> 15 </span>Oct<span class="hljs-number"> 15 </span>08:40 emptydir<br>drwxr-xr-x   <span class="hljs-number"> 1 </span>root     root           <span class="hljs-number"> 66 </span>Oct<span class="hljs-number"> 15 </span>08:36 etc<br>drwxr-xr-x   <span class="hljs-number"> 2 </span>root     root            <span class="hljs-number"> 6 </span>Aug<span class="hljs-number"> 27 </span>11:05 home<br>drwxr-xr-x   <span class="hljs-number"> 7 </span>root     root          <span class="hljs-number"> 247 </span>Aug<span class="hljs-number"> 27 </span>11:05 lib<br>drwxr-xr-x   <span class="hljs-number"> 5 </span>root     root           <span class="hljs-number"> 44 </span>Aug<span class="hljs-number"> 27 </span>11:05 media<br>drwxr-xr-x   <span class="hljs-number"> 2 </span>root     root            <span class="hljs-number"> 6 </span>Oct<span class="hljs-number"> 15 </span>08:05 mnt<br>drwxr-xr-x   <span class="hljs-number"> 2 </span>root     root            <span class="hljs-number"> 6 </span>Aug<span class="hljs-number"> 27 </span>11:05 opt<br>dr-xr-xr-x <span class="hljs-number"> 841 </span>root     root            <span class="hljs-number"> 0 </span>Oct<span class="hljs-number"> 15 </span>08:36 proc<br>drwx------   <span class="hljs-number"> 2 </span>root     root            <span class="hljs-number"> 6 </span>Aug<span class="hljs-number"> 27 </span>11:05 root<br>drwxr-xr-x   <span class="hljs-number"> 1 </span>root     root           <span class="hljs-number"> 21 </span>Oct<span class="hljs-number"> 15 </span>08:36 run<br>drwxr-xr-x   <span class="hljs-number"> 2 </span>root     root         <span class="hljs-number"> 4096 </span>Aug<span class="hljs-number"> 27 </span>11:05 sbin<br>drwxr-xr-x   <span class="hljs-number"> 2 </span>root     root            <span class="hljs-number"> 6 </span>Aug<span class="hljs-number"> 27 </span>11:05 srv<br>dr-xr-xr-x  <span class="hljs-number"> 13 </span>root     root            <span class="hljs-number"> 0 </span>Oct<span class="hljs-number"> 15 </span>08:36 sys<br>drwxrwxrwt   <span class="hljs-number"> 2 </span>root     root            <span class="hljs-number"> 6 </span>Aug<span class="hljs-number"> 27 </span>11:05 tmp<br>drwxr-xr-x   <span class="hljs-number"> 7 </span>root     root           <span class="hljs-number"> 66 </span>Aug<span class="hljs-number"> 27 </span>11:05 usr<br>drwxr-xr-x  <span class="hljs-number"> 12 </span>root     root          <span class="hljs-number"> 137 </span>Aug<span class="hljs-number"> 27 </span>11:05 var<br>/ $ <br>/ $ cd /emptydir/<br>/emptydir $ touch file<br>/emptydir $ <br>/emptydir $ cd ..<br>/ $ <br>/ $ cd /mnt<br>/mnt $ touch file<br>touch: file: Permission denied<br><br></code></pre></td></tr></table></figure>
-
 <p>确实如猜测的那样，<code>fsGroup</code>对<code>hostPath</code>挂载的存储卷并不生效：业务进程有权限在<code>/emptydir</code>目录下创建文件（容器进程属于补充组ID 2000，<code>/emptydir</code>属于组ID 2000），却没有权限在<code>/mnt</code>目录下创建文件（容器进程<code>uid=1001, gid=1001, group=2000</code>，而<code>/mnt</code>属于<code>root:root</code>）</p>
 <p>容器<code>hostPath</code>挂载路径的用户和组权限是不是跟着宿主机走呢？下面来验证。</p>
 <p>将宿主机目录<code>/tmp/mnt</code>设置为<code>host:host</code>，再将该路径通过<code>hostPath</code>挂载到Pod中：</p>
 <figure class="highlight tap"><table><tr><td class="code"><pre><code class="hljs tap">[root@laptop]<span class="hljs-comment"># groupadd -g 3000 host</span><br>[root@laptop]<span class="hljs-comment"># useradd -g host -u 3000 host</span><br>[root@laptop]<span class="hljs-comment"># chown -R host:host /tmp/mnt</span><br>[root@laptop]<span class="hljs-comment"># ls -atl /tmp/mnt</span><br>total 8<br>drwxrwxrwt.<span class="hljs-number"> 47 </span>root root<span class="hljs-number"> 4096 </span>10月<span class="hljs-number"> 15 </span>16:48 ..<br>drwxr-xr-x  <span class="hljs-number"> 2 </span>host host   <span class="hljs-number"> 6 </span>10月<span class="hljs-number"> 15 </span>16:05 .<br>[root@laptop]<span class="hljs-comment"># kubectl create -f pod.yaml </span><br>pod/demo created<br></code></pre></td></tr></table></figure>
-
 <p>shell进入容器进程：</p>
 <figure class="highlight tap"><table><tr><td class="code"><pre><code class="hljs tap">[root@laptop]<span class="hljs-comment"># kubectl exec -it demo sh</span><br>kubectl exec [POD] [COMMAND] is DEPRECATED and will be removed in a future version. Use kubectl exec [POD] -- [COMMAND] instead.<br>/ $ <br>/ $ <br>/ $ id<br>uid=1001 gid=1001 groups=2000<br>/ $ <br>/ $ ls -l<br>total 8<br>drwxr-xr-x   <span class="hljs-number"> 2 </span>root     root         <span class="hljs-number"> 4096 </span>Aug<span class="hljs-number"> 27 </span>11:05 bin<br>drwxr-xr-x   <span class="hljs-number"> 5 </span>root     root          <span class="hljs-number"> 360 </span>Oct<span class="hljs-number"> 15 </span>09:23 dev<br>drwxrwsrwx   <span class="hljs-number"> 2 </span>root    <span class="hljs-number"> 2000 </span>           <span class="hljs-number"> 6 </span>Oct<span class="hljs-number"> 15 </span>09:23 emptydir<br>drwxr-xr-x   <span class="hljs-number"> 1 </span>root     root           <span class="hljs-number"> 66 </span>Oct<span class="hljs-number"> 15 </span>09:23 etc<br>drwxr-xr-x   <span class="hljs-number"> 2 </span>root     root            <span class="hljs-number"> 6 </span>Aug<span class="hljs-number"> 27 </span>11:05 home<br>drwxr-xr-x   <span class="hljs-number"> 7 </span>root     root          <span class="hljs-number"> 247 </span>Aug<span class="hljs-number"> 27 </span>11:05 lib<br>drwxr-xr-x   <span class="hljs-number"> 5 </span>root     root           <span class="hljs-number"> 44 </span>Aug<span class="hljs-number"> 27 </span>11:05 media<br>drwxr-xr-x   <span class="hljs-number"> 2 </span>host     host            <span class="hljs-number"> 6 </span>Oct<span class="hljs-number"> 15 </span>08:05 mnt<br>drwxr-xr-x   <span class="hljs-number"> 2 </span>root     root            <span class="hljs-number"> 6 </span>Aug<span class="hljs-number"> 27 </span>11:05 opt<br>dr-xr-xr-x <span class="hljs-number"> 841 </span>root     root            <span class="hljs-number"> 0 </span>Oct<span class="hljs-number"> 15 </span>09:23 proc<br>drwx------   <span class="hljs-number"> 2 </span>root     root            <span class="hljs-number"> 6 </span>Aug<span class="hljs-number"> 27 </span>11:05 root<br>drwxr-xr-x   <span class="hljs-number"> 1 </span>root     root           <span class="hljs-number"> 21 </span>Oct<span class="hljs-number"> 15 </span>09:23 run<br>drwxr-xr-x   <span class="hljs-number"> 2 </span>root     root         <span class="hljs-number"> 4096 </span>Aug<span class="hljs-number"> 27 </span>11:05 sbin<br>drwxr-xr-x   <span class="hljs-number"> 2 </span>root     root            <span class="hljs-number"> 6 </span>Aug<span class="hljs-number"> 27 </span>11:05 srv<br>dr-xr-xr-x  <span class="hljs-number"> 13 </span>root     root            <span class="hljs-number"> 0 </span>Oct<span class="hljs-number"> 15 </span>09:23 sys<br>drwxrwxrwt   <span class="hljs-number"> 2 </span>root     root            <span class="hljs-number"> 6 </span>Aug<span class="hljs-number"> 27 </span>11:05 tmp<br>drwxr-xr-x   <span class="hljs-number"> 7 </span>root     root           <span class="hljs-number"> 66 </span>Aug<span class="hljs-number"> 27 </span>11:05 usr<br>drwxr-xr-x  <span class="hljs-number"> 12 </span>root     root          <span class="hljs-number"> 137 </span>Aug<span class="hljs-number"> 27 </span>11:05 var<br>/ $ cd /emptydir/<br>/emptydir $ touch file<br>/emptydir $ cd ..<br>/ $ cd /mnt<br>/mnt $ <br>/mnt $ touch file<br>touch: file: Permission denied<br></code></pre></td></tr></table></figure>
-
 <p><strong>如设想的一样，容器内部挂载的路径<code>/mnt</code>也是<code>host:host</code>权限，继承宿主机目录。</strong></p>
 <p>在云平台中，使用最多的通过PVC接入的第三方存储卷，<code>fsGroup</code>对这类存储卷是否生效？</p>
 <p>类似地，创建一个带有PVC模板的<code>StatefulSet</code></p>
 <figure class="highlight yaml"><table><tr><td class="code"><pre><code class="hljs yaml"><span class="hljs-attr">apiVersion:</span> <span class="hljs-string">apps/v1</span><br><span class="hljs-attr">kind:</span> <span class="hljs-string">StatefulSet</span><br><span class="hljs-attr">metadata:</span><br>  <span class="hljs-attr">name:</span> <span class="hljs-string">demo</span><br><span class="hljs-attr">spec:</span><br>  <span class="hljs-attr">serviceName:</span> <span class="hljs-string">demo</span><br>  <span class="hljs-attr">replicas:</span> <span class="hljs-number">1</span><br>  <span class="hljs-attr">selector:</span><br>    <span class="hljs-attr">matchLabels:</span><br>      <span class="hljs-attr">app:</span> <span class="hljs-string">demo</span><br>  <span class="hljs-attr">template:</span><br>    <span class="hljs-attr">metadata:</span><br>      <span class="hljs-attr">labels:</span><br>        <span class="hljs-attr">app:</span> <span class="hljs-string">demo</span><br>    <span class="hljs-attr">spec:</span><br>      <span class="hljs-attr">securityContext:</span><br>        <span class="hljs-attr">runAsUser:</span> <span class="hljs-number">1001</span><br>        <span class="hljs-attr">runAsGroup:</span> <span class="hljs-number">1001</span><br>        <span class="hljs-attr">fsGroup:</span> <span class="hljs-number">2000</span><br>      <span class="hljs-attr">containers:</span><br>        <span class="hljs-bullet">-</span> <span class="hljs-attr">name:</span> <span class="hljs-string">container</span><br>          <span class="hljs-attr">image:</span> <span class="hljs-string">alpine:latest</span><br>          <span class="hljs-attr">command:</span><br>          <span class="hljs-bullet">-</span> <span class="hljs-string">/bin/sh</span><br>          <span class="hljs-attr">args:</span><br>          <span class="hljs-bullet">-</span> <span class="hljs-string">-c</span><br>          <span class="hljs-bullet">-</span> <span class="hljs-string">sleep</span> <span class="hljs-number">36000000</span><br>          <span class="hljs-attr">volumeMounts:</span><br>            <span class="hljs-bullet">-</span> <span class="hljs-attr">mountPath:</span> <span class="hljs-string">/mnt</span><br>              <span class="hljs-attr">name:</span> <span class="hljs-string">mnt</span><br>            <span class="hljs-bullet">-</span> <span class="hljs-attr">mountPath:</span> <span class="hljs-string">/emptydir</span><br>              <span class="hljs-attr">name:</span> <span class="hljs-string">emptydir</span><br>            <span class="hljs-bullet">-</span> <span class="hljs-attr">mountPath:</span> <span class="hljs-string">/pvc</span><br>              <span class="hljs-attr">name:</span> <span class="hljs-string">pvc</span><br>      <span class="hljs-attr">volumes:</span><br>      <span class="hljs-bullet">-</span> <span class="hljs-attr">name:</span> <span class="hljs-string">mnt</span><br>        <span class="hljs-attr">hostPath:</span><br>          <span class="hljs-attr">path:</span> <span class="hljs-string">/tmp/mnt</span><br>          <span class="hljs-attr">type:</span> <span class="hljs-string">DirectoryOrCreate</span><br>      <span class="hljs-bullet">-</span> <span class="hljs-attr">name:</span> <span class="hljs-string">emptydir</span><br>        <span class="hljs-attr">emptyDir:</span> &#123;&#125;<br>  <span class="hljs-attr">volumeClaimTemplates:</span><br>    <span class="hljs-bullet">-</span> <span class="hljs-attr">metadata:</span><br>        <span class="hljs-attr">name:</span> <span class="hljs-string">pvc</span><br>      <span class="hljs-attr">spec:</span><br>        <span class="hljs-attr">accessModes:</span><br>          <span class="hljs-bullet">-</span> <span class="hljs-string">ReadWriteOnce</span><br>        <span class="hljs-attr">resources:</span><br>          <span class="hljs-attr">requests:</span><br>            <span class="hljs-attr">storage:</span> <span class="hljs-string">10Mi</span><br>        <span class="hljs-attr">storageClassName:</span> <span class="hljs-string">longhorn-default</span><br></code></pre></td></tr></table></figure>
-
 <p>等待Pod Runing之后，shell进入容器进程，<strong>发现fsGroup对PVC挂载路径的权限生效</strong>。</p>
 <figure class="highlight tap"><table><tr><td class="code"><pre><code class="hljs tap">[root@laptop]<span class="hljs-comment"># kubectl exec -it demo-0 sh</span><br>kubectl exec [POD] [COMMAND] is DEPRECATED and will be removed in a future version. Use kubectl exec [POD] -- [COMMAND] instead.<br>/ $ <br>/ $ id<br>uid=1001 gid=1001 groups=2000<br>/ $ <br>/ $ ls -l<br>total 8<br>drwxr-xr-x   <span class="hljs-number"> 2 </span>root     root         <span class="hljs-number"> 4096 </span>Aug<span class="hljs-number"> 27 </span>11:05 bin<br>drwxr-xr-x   <span class="hljs-number"> 5 </span>root     root          <span class="hljs-number"> 360 </span>Oct<span class="hljs-number"> 15 </span>09:39 dev<br>drwxrwsrwx   <span class="hljs-number"> 2 </span>root    <span class="hljs-number"> 2000 </span>           <span class="hljs-number"> 6 </span>Oct<span class="hljs-number"> 15 </span>09:39 emptydir<br>drwxr-xr-x   <span class="hljs-number"> 1 </span>root     root           <span class="hljs-number"> 66 </span>Oct<span class="hljs-number"> 15 </span>09:39 etc<br>drwxr-xr-x   <span class="hljs-number"> 2 </span>root     root            <span class="hljs-number"> 6 </span>Aug<span class="hljs-number"> 27 </span>11:05 home<br>drwxr-xr-x   <span class="hljs-number"> 7 </span>root     root          <span class="hljs-number"> 247 </span>Aug<span class="hljs-number"> 27 </span>11:05 lib<br>drwxr-xr-x   <span class="hljs-number"> 5 </span>root     root           <span class="hljs-number"> 44 </span>Aug<span class="hljs-number"> 27 </span>11:05 media<br>drwxr-xr-x   <span class="hljs-number"> 2 </span>root     root            <span class="hljs-number"> 6 </span>Oct<span class="hljs-number"> 15 </span>08:05 mnt<br>drwxr-xr-x   <span class="hljs-number"> 2 </span>root     root            <span class="hljs-number"> 6 </span>Aug<span class="hljs-number"> 27 </span>11:05 opt<br>dr-xr-xr-x <span class="hljs-number"> 841 </span>root     root            <span class="hljs-number"> 0 </span>Oct<span class="hljs-number"> 15 </span>09:39 proc<br>drwxrwsr-x   <span class="hljs-number"> 2 </span>root    <span class="hljs-number"> 2000 </span>           <span class="hljs-number"> 6 </span>Oct<span class="hljs-number"> 15 </span>09:39 pvc<br>drwx------   <span class="hljs-number"> 2 </span>root     root            <span class="hljs-number"> 6 </span>Aug<span class="hljs-number"> 27 </span>11:05 root<br>drwxr-xr-x   <span class="hljs-number"> 1 </span>root     root           <span class="hljs-number"> 21 </span>Oct<span class="hljs-number"> 15 </span>09:39 run<br>drwxr-xr-x   <span class="hljs-number"> 2 </span>root     root         <span class="hljs-number"> 4096 </span>Aug<span class="hljs-number"> 27 </span>11:05 sbin<br>drwxr-xr-x   <span class="hljs-number"> 2 </span>root     root            <span class="hljs-number"> 6 </span>Aug<span class="hljs-number"> 27 </span>11:05 srv<br>dr-xr-xr-x  <span class="hljs-number"> 13 </span>root     root            <span class="hljs-number"> 0 </span>Oct<span class="hljs-number"> 15 </span>09:39 sys<br>drwxrwxrwt   <span class="hljs-number"> 2 </span>root     root            <span class="hljs-number"> 6 </span>Aug<span class="hljs-number"> 27 </span>11:05 tmp<br>drwxr-xr-x   <span class="hljs-number"> 7 </span>root     root           <span class="hljs-number"> 66 </span>Aug<span class="hljs-number"> 27 </span>11:05 usr<br>drwxr-xr-x  <span class="hljs-number"> 12 </span>root     root          <span class="hljs-number"> 137 </span>Aug<span class="hljs-number"> 27 </span>11:05 var<br>/ $ <br>/ $ cd /emptydir/<br>/emptydir $ touch file<br>/emptydir $ cd ..<br>/ $ cd /pvc<br>/pvc $ touch file<br>/pvc $ cd ..<br>/ $ cd /mnt<br>/mnt $ touch file<br>touch: file: Permission denied<br></code></pre></td></tr></table></figure>
-
 <p><strong>综上，对于Pod挂载的存储卷，如果通过hostPath挂载，则fsGroup不生效，容器内部的挂载路径继承成宿主机的权限；如果通过emptyDir或者PVC挂载，fsGroup生效。</strong></p>
-<h3 id="PersitentVolume"><a href="#PersitentVolume" class="headerlink" title="PersitentVolume"></a>PersitentVolume</h3><p>PV <code>mountOptions</code>或者 <code>pv.beta.kubernetes.io/gid</code> 注释，定义路径挂载时使用哪个用户组</p>
-<h3 id="InitContainer"><a href="#InitContainer" class="headerlink" title="InitContainer"></a>InitContainer</h3><p>类似于Dockerfile，在initContainer中使用<code>chown</code>修改文件系统的用户组</p>
+<h3 id="persitentvolume">PersitentVolume</h3>
+<p>PV <code>mountOptions</code>或者 <code>pv.beta.kubernetes.io/gid</code> 注释，定义路径挂载时使用哪个用户组</p>
+<h3 id="initcontainer">InitContainer</h3>
+<p>类似于Dockerfile，在initContainer中使用<code>chown</code>修改文件系统的用户组</p>
 <figure class="highlight dts"><table><tr><td class="code"><pre><code class="hljs dts"><span class="hljs-symbol">initContainers:</span><br>- name: init<br><span class="hljs-symbol">  image:</span> alpine:latest<br><span class="hljs-symbol">  command:</span> [<span class="hljs-string">&quot;sh&quot;</span>, <span class="hljs-string">&quot;-c&quot;</span>, <span class="hljs-string">&quot;chown -R 1001:1001 /mnt&quot;</span>]<br><span class="hljs-symbol">  volumeMounts:</span><br>  - name: mount-pvc<br><span class="hljs-symbol">    mountPath:</span> /mnt<br></code></pre></td></tr></table></figure>
-
-<h2 id="参考"><a href="#参考" class="headerlink" title="参考"></a>参考</h2><p><a href="https://stackoverflow.com/questions/51390789/kubernetes-persistent-volume-claim-mounted-with-wrong-gid">https://stackoverflow.com/questions/51390789/kubernetes-persistent-volume-claim-mounted-with-wrong-gid</a></p>
-<p><a href="https://kubernetes.io/zh/docs/tasks/configure-pod-container/security-context/">https://kubernetes.io/zh/docs/tasks/configure-pod-container/security-context/</a></p>
-<p><a href="https://serverfault.com/questions/906083/how-to-mount-volume-with-specific-uid-in-kubernetes-pod">https://serverfault.com/questions/906083/how-to-mount-volume-with-specific-uid-in-kubernetes-pod</a></p>
+<h2 id="参考">参考</h2>
+<p>https://stackoverflow.com/questions/51390789/kubernetes-persistent-volume-claim-mounted-with-wrong-gid</p>
+<p>https://kubernetes.io/zh/docs/tasks/configure-pod-container/security-context/</p>
+<p>https://serverfault.com/questions/906083/how-to-mount-volume-with-specific-uid-in-kubernetes-pod</p>
 ]]></content>
       <categories>
         <category>专业</category>
@@ -74,40 +68,36 @@
     <url>/2021/11/26/dmsetup-delete-deivce-busy/</url>
     <content><![CDATA[<p><code>dmsetup remove &lt;device&gt;</code>设备时，偶尔出现<code>Device Busy</code>无法删除。本文提供一种强制删除dm设备的操作步骤，可能无法解决所有的问题。后续需要深入研究Linux devicemapper的IO栈，找到根因。</p>
 <span id="more"></span>
-
-<h2 id="Step-1"><a href="#Step-1" class="headerlink" title="Step 1"></a>Step 1</h2><p><code>mount | grep xxx</code>， 查看设备是否正在被挂载使用；如果设备正在被挂载，使用Linux umount解挂载。注意，如果设备有多个挂载点，需要多次执行umount知道所有挂载点被解挂载。</p>
-<h2 id="Step-2"><a href="#Step-2" class="headerlink" title="Step 2"></a>Step 2</h2><p><code>lsof </code>&amp; <code>fuser</code>查看是否有进程正在使用该设备；如果有进程正在使用，在确保进程可以杀死后，<code>kill -9 &lt;pid&gt;</code></p>
-<h2 id="Step-3"><a href="#Step-3" class="headerlink" title="Step 3"></a>Step 3</h2><p>如果没有挂载且没有进程正在使用</p>
-<ol>
+<h2 id="step-1">Step 1</h2>
+<p><code>mount | grep xxx</code>， 查看设备是否正在被挂载使用；如果设备正在被挂载，使用Linux umount解挂载。注意，如果设备有多个挂载点，需要多次执行umount知道所有挂载点被解挂载。</p>
+<h2 id="step-2">Step 2</h2>
+<p><code>lsof</code>&amp; <code>fuser</code>查看是否有进程正在使用该设备；如果有进程正在使用，在确保进程可以杀死后，<code>kill -9 &lt;pid&gt;</code></p>
+<h2 id="step-3">Step 3</h2>
+<p>如果没有挂载且没有进程正在使用</p>
+<ol type="1">
 <li><code>dmsetup status pvc-xxx</code>， 查看设备table</li>
 </ol>
 <figure class="highlight subunit"><table><tr><td class="code"><pre><code class="hljs subunit">[root@node<span class="hljs-string">-172</span><span class="hljs-string">-16</span><span class="hljs-string">-124</span><span class="hljs-string">-14</span> ~]# dmsetup status pvc-af945d77<span class="hljs-string">-234</span>c<span class="hljs-string">-49</span>b8-bc4c<span class="hljs-string">-3</span>d360c01bb19<br>0 419430400 thin 286720 419430399<br></code></pre></td></tr></table></figure>
-
-<ol start="2">
+<ol start="2" type="1">
 <li><code>dmsetup reload</code>重写dm table将设备设置为error</li>
 </ol>
 <figure class="highlight subunit"><table><tr><td class="code"><pre><code class="hljs subunit">[root@node<span class="hljs-string">-172</span><span class="hljs-string">-16</span><span class="hljs-string">-124</span><span class="hljs-string">-14</span> ~]# dmsetup reload pvc-af945d77<span class="hljs-string">-234</span>c<span class="hljs-string">-49</span>b8-bc4c<span class="hljs-string">-3</span>d360c01bb19 --table &quot;0 419430400 error&quot;<br></code></pre></td></tr></table></figure>
-
-<ol start="3">
+<ol start="3" type="1">
 <li><code>dmsetup suspend</code></li>
 </ol>
 <figure class="highlight subunit"><table><tr><td class="code"><pre><code class="hljs subunit">[root@node<span class="hljs-string">-172</span><span class="hljs-string">-16</span><span class="hljs-string">-124</span><span class="hljs-string">-14</span> ~]# dmsetup suspend --noflush pvc-af945d77<span class="hljs-string">-234</span>c<span class="hljs-string">-49</span>b8-bc4c<span class="hljs-string">-3</span>d360c01bb19<br></code></pre></td></tr></table></figure>
-
-<ol start="4">
+<ol start="4" type="1">
 <li><code>dmsetup resume</code></li>
 </ol>
 <figure class="highlight subunit"><table><tr><td class="code"><pre><code class="hljs subunit">[root@node<span class="hljs-string">-172</span><span class="hljs-string">-16</span><span class="hljs-string">-124</span><span class="hljs-string">-14</span> ~]# dmsetup resume pvc-af945d77<span class="hljs-string">-234</span>c<span class="hljs-string">-49</span>b8-bc4c<span class="hljs-string">-3</span>d360c01bb19<br></code></pre></td></tr></table></figure>
-
-<ol start="5">
+<ol start="5" type="1">
 <li><code>dmsetup status pvc-xxx</code>，确认状态是error</li>
 </ol>
 <figure class="highlight subunit"><table><tr><td class="code"><pre><code class="hljs subunit">[root@node<span class="hljs-string">-172</span><span class="hljs-string">-16</span><span class="hljs-string">-124</span><span class="hljs-string">-14</span> ~]# dmsetup status pvc-af945d77<span class="hljs-string">-234</span>c<span class="hljs-string">-49</span>b8-bc4c<span class="hljs-string">-3</span>d360c01bb19<br>0 419430400 error <br></code></pre></td></tr></table></figure>
-
-<ol start="6">
+<ol start="6" type="1">
 <li><code>dmsetup remove --force</code>删除设备</li>
 </ol>
 <figure class="highlight subunit"><table><tr><td class="code"><pre><code class="hljs subunit">[root@node<span class="hljs-string">-172</span><span class="hljs-string">-16</span><span class="hljs-string">-124</span><span class="hljs-string">-14</span> ~]# dmsetup remove --force pvc-af945d77<span class="hljs-string">-234</span>c<span class="hljs-string">-49</span>b8-bc4c<span class="hljs-string">-3</span>d360c01bb19<br></code></pre></td></tr></table></figure>
-
 ]]></content>
       <categories>
         <category>专业</category>
@@ -122,28 +112,255 @@
       </tags>
   </entry>
   <entry>
+    <title>PlantUML使用姿势</title>
+    <url>/2021/11/03/plantUML/</url>
+    <content><![CDATA[<p>发现一个在线画时序图的工具PlantUML，该工具提供vscode插件，可以使用代码编辑时序图逻辑，并实时预览。</p>
+<span id="more"></span>
+<h3 id="vscode插件安装和使用方法">vscode插件安装和使用方法</h3>
+<p>https://marketplace.visualstudio.com/items?itemName=okazuki.okazukiplantuml</p>
+<ul>
+<li><p><code>F1</code>唤起vscode命令行操作</p></li>
+<li><p><code>PlantUML: Preview Current Diagram</code> : Start PlantUML preview.</p></li>
+<li><p><code>PlantUML: Export Current Diagram -&gt; ***(*** is format type)</code> : Export png, svg, eps, etc... to same directory.</p></li>
+<li><p><code>PlantUML: Extract PlantUML Diagram Source from Image</code>: 将图片还原成plantUML代码，实测时灵时不灵</p></li>
+</ul>
+<h3 id="使用文档">使用文档</h3>
+<p>PlantUML提供了丰富的关键词和语法，详见https://plantuml.com/zh/sequence-diagram</p>
+<p>下面摘要出日常使用的几个基本语法。</p>
+<h4 id="基本用例">基本用例</h4>
+<p>序列<code>-&gt;</code> 用于绘制两个 参与者之间的信息。 参与者不必明确声明。</p>
+<p>要有一个点状的箭头，就用<code>--&gt;</code></p>
+<p>也可以用<code>&lt;-</code> 和<code>&lt;--</code> 。 这不会改变绘图，但可能提高可读性。 注意，这只适用于序列图，其他图的规则不同。</p>
+<figure class="highlight less"><table><tr><td class="code"><pre><code class="hljs less"><span class="hljs-variable">@startuml</span><br>Alice -&gt; <span class="hljs-attribute">Bob</span>: Authentication Request<br>Bob --&gt; <span class="hljs-attribute">Alice</span>: Authentication Response<br><br>Alice -&gt; <span class="hljs-attribute">Bob</span>: Another authentication Request<br>Alice &lt;-- <span class="hljs-attribute">Bob</span>: Another authentication Response<br><span class="hljs-variable">@enduml</span><br></code></pre></td></tr></table></figure>
+<p>http://www.plantuml.com/plantuml/uml/SoWkIImgAStDuNBCoKnELT2rKt3AJx9IS2mjoKZDAybCJYp9pCzJ24ejB4qjBk42oYde0jM05MDHLLoGdrUSoeLkM5u-K5sHGY9sGo6ARNHr2QY66kwGcfS2SZ00</p>
+<h4 id="生命参与者">生命参与者</h4>
+<h5 id="participant">participant</h5>
+<p>使用 <code>participant</code> 关键字来声明一个参与者可以使你对参与者做出更多控制。</p>
+<p>关键字 <code>participant</code> 用于改变参与者的先后顺序。</p>
+<p>你也可以使用下面这些关键字来声明参与者，这会<strong>改变参与者的外观</strong>：</p>
+<ul>
+<li><code>actor</code>（角色）</li>
+<li><code>boundary</code>（边界）</li>
+<li><code>control</code>（控制）</li>
+<li><code>entity</code>（实体）</li>
+<li><code>database</code>（数据库）</li>
+<li><code>collections</code>（集合）</li>
+<li><code>queue</code>（队列）</li>
+</ul>
+<figure class="highlight xl"><table><tr><td class="code"><pre><code class="hljs xl">@startuml<br>participant participant <span class="hljs-keyword">as</span> Foo<br>actor       actor       <span class="hljs-keyword">as</span> Foo1<br>boundary    boundary    <span class="hljs-keyword">as</span> Foo2<br>control     control     <span class="hljs-keyword">as</span> Foo3<br>entity      entity      <span class="hljs-keyword">as</span> Foo4<br>database    database    <span class="hljs-keyword">as</span> Foo5<br>collections collections <span class="hljs-keyword">as</span> Foo6<br>queue       queue       <span class="hljs-keyword">as</span> Foo7<br>F<span class="hljs-function"><span class="hljs-title">oo</span> -&gt;</span> Foo1 : To actor <br>F<span class="hljs-function"><span class="hljs-title">oo</span> -&gt;</span> Foo2 : To boundary<br>F<span class="hljs-function"><span class="hljs-title">oo</span> -&gt;</span> Foo3 : To control<br>F<span class="hljs-function"><span class="hljs-title">oo</span> -&gt;</span> Foo4 : To entity<br>F<span class="hljs-function"><span class="hljs-title">oo</span> -&gt;</span> Foo5 : To database<br>F<span class="hljs-function"><span class="hljs-title">oo</span> -&gt;</span> Foo6 : To collections<br>F<span class="hljs-function"><span class="hljs-title">oo</span> -&gt;</span> Foo7 : To queue<br>@enduml<br></code></pre></td></tr></table></figure>
+<p>http://www.plantuml.com/plantuml/uml/LP4n3iCW34Ltdu8BT6ZI95A7AbDFq0iuX069uXJCaDitmKdbCi3JVyBYYp4p9Yxl0CjsUkiNZ6mqOpPF8a3Bb8oiFwxw2XELE6DQzqop-0OiHKuKwXtDubjmaJslCbEp-1lCo3XXTdkcMNotpG_1MVOKiz4ileTFSSKTRzOiVe1jCvT7xMBkvaL7IPKtaf_bb6d57BMKk8cGFYhl93zxADEVetuDb1n4rkV3wEAy_ziN</p>
+<h5 id="as">as</h5>
+<p>关键字 <code>as</code> 用于重命名参与者</p>
+<p>你还可以使用<a href="https://plantuml.com/zh/color">RGB</a>值或者颜色名修改 actor 或参与者的背景颜色。</p>
+<figure class="highlight less"><table><tr><td class="code"><pre><code class="hljs less"><span class="hljs-variable">@startuml</span><br>actor Bob #red<br>&#x27; actor 和 participant 只在外观上有区别<br>participant Alice<br>participant <span class="hljs-string">&quot;很长很长很长\n的名字&quot;</span> as L <span class="hljs-number">#99FF99</span><br>/&#x27; 也可以这样声明：<br>   participant L as <span class="hljs-string">&quot;很长很长很长\n的名字&quot;</span>  <span class="hljs-number">#99FF99</span><br>  &#x27;/<br><br>Alice-&gt;<span class="hljs-attribute">Bob</span>: 认证请求<br>Bob-&gt;<span class="hljs-attribute">Alice</span>: 认证响应<br>Bob-&gt;<span class="hljs-attribute">L</span>: 记录事务日志<br><span class="hljs-variable">@enduml</span><br></code></pre></td></tr></table></figure>
+<p>http://www.plantuml.com/plantuml/uml/SoWkIImgAStDuKfCBialKd3AJr9GBafDuL9NW0WydTIZK01KafcSMP2OLwBmj7_LqpahdYwPzc9vqvCTNS_cT3xjsVMqOpKNiYB7dCpaL1GHfQVxEbvEtOzCnkGzdzNoT4BlqxNJbHGIYnLy59GjBTtSB2svzDKLdkoS_xH__PFTIr_id_bimVQdYpSycz7tViyiBWK55EVuW7GICXnki8A2kZuN5zXrkdP0hrefl5YtvCNwnXVhjp_RsCG55D6r0yl299vExdswQmf4mWSakE7ftgbFTdK_xLhuRFhIf_kdSpcavgM0WWy0</p>
+<h5 id="order">order</h5>
+<p>您可以使用关键字 <code>order</code>自定义顺序来打印参与者。</p>
+<figure class="highlight less"><table><tr><td class="code"><pre><code class="hljs less"><span class="hljs-variable">@startuml</span><br>participant 最后 order <span class="hljs-number">30</span><br>participant 中间 order <span class="hljs-number">20</span><br>participant 首个 order <span class="hljs-number">10</span><br><span class="hljs-variable">@enduml</span><br></code></pre></td></tr></table></figure>
+<p>http://www.plantuml.com/plantuml/uml/SoWkIImgAStDuIe0qfd9cGM9UIKAp-OqF9tGfv1Vb99Qf61iW2BtPCVQbzEtGEMCKELUBflsPCSgg9oX0PT3QbuAo6m0</p>
+<h4 id="箭头样式">箭头样式</h4>
+<p>修改箭头样式的方式有以下几种:</p>
+<ul>
+<li>表示一条丢失的消息：末尾加 <code>x</code></li>
+<li>让箭头只有上半部分或者下半部分：将<code>&lt;</code>和<code>&gt;</code>替换成<code>\</code>或者 <code>/</code></li>
+<li>细箭头：将箭头标记写两次 (如 <code>&gt;&gt;</code> 或 <code>//</code>)</li>
+<li>虚线箭头：用 <code>--</code> 替代 <code>-</code></li>
+<li>箭头末尾加圈：<code>-&gt;o</code></li>
+<li>双向箭头：<code>&lt;-&gt;</code></li>
+</ul>
+<figure class="highlight xl"><table><tr><td class="code"><pre><code class="hljs xl">@startuml<br>B<span class="hljs-function"><span class="hljs-title">ob</span> -&gt;</span>x Alice<br>B<span class="hljs-function"><span class="hljs-title">ob</span> -&gt;</span> Alice<br>B<span class="hljs-function"><span class="hljs-title">ob</span> -&gt;</span>&gt; Alice<br>Bob -\ Alice<br>Bob \\- Alice<br>Bob <span class="hljs-comment">//-- Alice</span><br><br>B<span class="hljs-function"><span class="hljs-title">ob</span> -&gt;</span>o Alice<br>Bob o\\-- Alice<br><br>B<span class="hljs-function"><span class="hljs-title">ob</span> &lt;-&gt;</span> Alice<br>B<span class="hljs-function"><span class="hljs-title">ob</span> &lt;-&gt;</span>o Alice<br>@enduml<br></code></pre></td></tr></table></figure>
+<p>http://www.plantuml.com/plantuml/uml/SoWkIImgAStDuNBAJrBGjQjGSCp9J4w5yb0uABmO94vCZ2uIJrzV5yQ5Qin7aiq7AaQHja6nnGQXsY4rBmNaBW00</p>
+<h4 id="对消息序列编号">对消息序列编号</h4>
+<h5 id="autonumber">autonumber</h5>
+<p>关键字 <code>autonumber</code> 用于自动对消息编号。</p>
+<p>语句 <code>autonumber //start//</code> 用于指定编号的初始值，而 <code>autonumber //start// //increment//</code> 可以同时指定编号的初始值和每次增加的值。</p>
+<figure class="highlight less"><table><tr><td class="code"><pre><code class="hljs less"><span class="hljs-variable">@startuml</span><br>autonumber<br>Bob -&gt; <span class="hljs-attribute">Alice </span>: Authentication Request<br>Bob &lt;- <span class="hljs-attribute">Alice </span>: Authentication Response<br><br>autonumber <span class="hljs-number">15</span><br>Bob -&gt; <span class="hljs-attribute">Alice </span>: Another authentication Request<br>Bob &lt;- <span class="hljs-attribute">Alice </span>: Another authentication Response<br><br>autonumber <span class="hljs-number">40</span> <span class="hljs-number">10</span><br>Bob -&gt; <span class="hljs-attribute">Alice </span>: Yet another authentication Request<br>Bob &lt;- <span class="hljs-attribute">Alice </span>: Yet another authentication Response<br><br><span class="hljs-variable">@enduml</span><br></code></pre></td></tr></table></figure>
+<p>http://www.plantuml.com/plantuml/uml/SoWkIImgAStDuKeiBSdFAyrDIYtYSifFKj2rKt3CoKnELR1IS2mjoKZDAybCJYp9pCzJ24ejB4qjBW6hij75hQgu83-lE9KBoM05GrCCi_FoWTgA51A9imENQYnscHWe61gWMnUPMgAGI9ALU7N0h7L8pKi1XI40</p>
+<h4 id="分隔示意图">分隔示意图</h4>
+<h5 id="newpage">newpage</h5>
+<p>关键字 <code>newpage</code> 用于把一张图分割成多张。</p>
+<p>在 <code>newpage</code> 之后添加文字，作为新的示意图的标题。</p>
+<p>这样就能很方便地在 <em>Word</em> 中将长图分几页打印。</p>
+<figure class="highlight less"><table><tr><td class="code"><pre><code class="hljs less"><span class="hljs-variable">@startuml</span><br><br>Alice -&gt; <span class="hljs-attribute">Bob </span>: message <span class="hljs-number">1</span><br>Alice -&gt; <span class="hljs-attribute">Bob </span>: message <span class="hljs-number">2</span><br><br>newpage<br><br>Alice -&gt; <span class="hljs-attribute">Bob </span>: message <span class="hljs-number">3</span><br>Alice -&gt; <span class="hljs-attribute">Bob </span>: message <span class="hljs-number">4</span><br><br>newpage A title for the\nlast page<br><br>Alice -&gt; <span class="hljs-attribute">Bob </span>: message <span class="hljs-number">5</span><br>Alice -&gt; <span class="hljs-attribute">Bob </span>: message <span class="hljs-number">6</span><br><span class="hljs-variable">@enduml</span><br></code></pre></td></tr></table></figure>
+<p>http://www.plantuml.com/plantuml/uml/SoWkIImgAStDuU9opCbCJbNGjLDmoazIi5B8JIqkJanFLJ349M74nPMNMbu0PEBKQunBmWIkLy5HeIIp92TL8Is_IA4a8pKcBoUnk4G1hx6ck2JCk1nIyr90lW40</p>
+<h4 id="组合消息">组合消息</h4>
+<p>我们可以通过以下关键词来组合消息：</p>
+<ul>
+<li><code>alt/else</code></li>
+<li><code>opt</code></li>
+<li><code>loop</code></li>
+<li><code>par</code></li>
+<li><code>break</code></li>
+<li><code>critical</code></li>
+<li><code>group</code>, 后面紧跟着消息内容</li>
+</ul>
+<p>关键词 <code>end</code> 用来结束分组。注意，分组可以嵌套使用。</p>
+<figure class="highlight less"><table><tr><td class="code"><pre><code class="hljs less"><span class="hljs-variable">@startuml</span><br>Alice -&gt; <span class="hljs-attribute">Bob</span>: 认证请求<br><br>alt 成功情况<br><br>    Bob -&gt; <span class="hljs-attribute">Alice</span>: 认证接受<br><br>else 某种失败情况<br><br>    Bob -&gt; <span class="hljs-attribute">Alice</span>: 认证失败<br>    group 我自己的标签<br>    Alice -&gt; <span class="hljs-attribute">Log </span>: 开始记录攻击日志<br>        loop <span class="hljs-number">1000</span>次<br>            Alice -&gt; <span class="hljs-attribute">Bob</span>: DNS 攻击<br>        end<br>    Alice -&gt; <span class="hljs-attribute">Log </span>: 结束记录攻击日志<br>    end<br><br>else 另一种失败<br><br>   Bob -&gt; <span class="hljs-attribute">Alice</span>: 请重复<br><br>end<br><span class="hljs-variable">@enduml</span><br></code></pre></td></tr></table></figure>
+<p>http://www.plantuml.com/plantuml/uml/SoWkIImgAStDuNBCoKnELT2rKt3AJx9IUB5koOlrZI_MRt-siOcBAp6dHE5PnuIdNVEVDRS-RTlAnQK014258FLWZJ0Tp_gMFksVpiMLcbESgl1i_eJdotkVBjduOijIGXeXgi3IwKNvfGL0-oQ-Q5_rTFl6vxDQdYreVxvs7rWIxaoV_7G5AuMdUngUBkz-iMx3qxrJdqtP_RHzzxFfIv_kdmvM2m8v-Va52eO61WRFrYo42w8O1FQlYr-m0aG_N55gNWes6v_ldlnixdmSDeBqGFp-j7_PanqDSE-3FOxcx_NRNxO3fNk1Ee3Q7804A1u0</p>
+<h4 id="次级分组标签">次级分组标签</h4>
+<p>对于<code>group</code>而言，在标头处的<code>[</code>和<code>]</code>之间可以显示次级文本或标签。</p>
+<figure class="highlight less"><table><tr><td class="code"><pre><code class="hljs less"><span class="hljs-variable">@startuml</span><br>Alice -&gt; <span class="hljs-attribute">Bob</span>: 认证请求<br>Bob -&gt; <span class="hljs-attribute">Alice</span>: 认证失败<br>group 我自己的标签 [我自己的标签<span class="hljs-number">2</span>]<br>    Alice -&gt; <span class="hljs-attribute">Log </span>: 开始记录攻击日志<br>    loop <span class="hljs-number">1000</span>次<br>        Alice -&gt; <span class="hljs-attribute">Bob</span>: DNS攻击<br>    end<br>    Alice -&gt; <span class="hljs-attribute">Log </span>: 结束记录攻击日志<br>end<br><span class="hljs-variable">@enduml</span><br></code></pre></td></tr></table></figure>
+<p>http://www.plantuml.com/plantuml/uml/SoWkIImgAStDuNBCoKnELT2rKt3AJx9IUB5koOlrZI_MRt-siOaBA0AI0Ak0IJrTil75bgLSwKNvfGKAppeclcXVzNJxnkUpMfujQ7--Tfz2DAQOKIoN0X30BVB9JrUmKdYwf-7fykuNwpOytJlrsPJTJzjtFvk-zEd-wM2rEVdv1Gg61WO6pzOi10kW601sgOjVC4GRM3urBmMR9SztJtusTpuMIq3g7O04A0G0</p>
+<h4 id="信息注释">信息注释</h4>
+<p>可以使用<code>note left</code> 或<code>note right</code> 关键字<em>在信息后面</em>加上注释。</p>
+<p>你可以使用<code>end note</code> 关键字有一个多行注释。</p>
+<figure class="highlight less"><table><tr><td class="code"><pre><code class="hljs less"><span class="hljs-variable">@startuml</span><br>Alice-&gt;<span class="hljs-attribute">Bob </span>: hello<br>note <span class="hljs-attribute">left</span>: this is a first note<br><br>Bob-&gt;<span class="hljs-attribute">Alice </span>: ok<br>note <span class="hljs-attribute">right</span>: this is another note<br><br>Bob-&gt;<span class="hljs-attribute">Bob </span>: I am thinking<br>note left<br>a note<br>can also be defined<br>on several lines<br>end note<br><span class="hljs-variable">@enduml</span><br></code></pre></td></tr></table></figure>
+<p>http://www.plantuml.com/plantuml/uml/JOz13iCW30JlViL-81_88KfxwpESO0AAOoIWVN-X71h91sizevNNKZdNzwNqqBZBj3pJXXb1L1DPgW8LNsVK40lQC7pCfQAVY1eyBJ-nEUaSGev7k1ij39BlnkXuWQzEsHdj-7SH3tHd0sj9s0HEV3Hnb0n5Ff9PeIqe9EO6lRQjV_45</p>
+<h4 id="分隔符">分隔符</h4>
+<p>你可以通过使用<code>==</code>关键词来将你的图表分割成多个逻辑步骤。</p>
+<figure class="highlight asciidoc"><table><tr><td class="code"><pre><code class="hljs asciidoc">@startuml<br><br><span class="hljs-section">== 初始化 ==</span><br><br>Alice -&gt; Bob: 认证请求<br>Bob --&gt; Alice: 认证响应<br><br><span class="hljs-section">== 重复 ==</span><br><br>Alice -&gt; Bob: 认证请求<br>Alice &lt;-- Bob: 认证响应<br><br>@enduml<br></code></pre></td></tr></table></figure>
+<p>http://www.plantuml.com/plantuml/uml/SoWkIImgAStDuUAojLLusZ7twVBkfptJ56njkRWSSpAJKnLqxHISyfEi55wiM_9YVUEBzTkVRMpY0eeew09bm4fWSaydzpxTDGLiqClstgTBUWcP0f6oqTL5beEPuf2Qbm9o5m00</p>
+<h4 id="生命线的激活与撤销">生命线的激活与撤销</h4>
+<p>关键字<code>activate</code>和<code>deactivate</code>用来表示参与者的生命活动。</p>
+<p>一旦参与者被激活，它的生命线就会显示出来。</p>
+<p><code>activate</code>和<code>deactivate</code>适用于以上情形。</p>
+<p><code>destroy</code>表示一个参与者的生命线的终结。</p>
+<figure class="highlight less"><table><tr><td class="code"><pre><code class="hljs less"><span class="hljs-variable">@startuml</span><br>participant User<br><br>User -&gt; <span class="hljs-attribute">A</span>: DoWork<br>activate A<br><br>A -&gt; <span class="hljs-attribute">B</span>: &lt;&lt; createRequest &gt;&gt;<br>activate B<br><br>B -&gt; <span class="hljs-attribute">C</span>: DoWork<br>activate C<br>C --&gt; <span class="hljs-attribute">B</span>: WorkDone<br>destroy C<br><br>B --&gt; <span class="hljs-attribute">A</span>: RequestCreated<br>deactivate B<br><br>A -&gt; <span class="hljs-attribute">User</span>: Done<br>deactivate A<br><br><span class="hljs-variable">@enduml</span><br></code></pre></td></tr></table></figure>
+<p>http://www.plantuml.com/plantuml/uml/POzH2iCW38RVSufSe1SeHQhs18EnPz4yo3RjD1tqzZDsiC9U4iZ_vykVkR8hl3qViBOUVLnTOhnMAW1ISL2eHrpoBPSxEC_nxPXG0sYHp8ZJXBvG6rxejL5bLEhdCm16VFOVOS7YS214M78Y26s_vBrfidQS_c9jln6QvGpl8IIdy3lW776c5EIr3m00</p>
+<h3 id="练手环节">练手环节</h3>
+<p>使用vscode PlantUML插件，画出Pod创建过程中，各组件之间的交互逻辑</p>
+<figure class="highlight xl"><table><tr><td class="code"><pre><code class="hljs xl">@startuml<br><br>actor <span class="hljs-string">&quot;用户&quot;</span> <span class="hljs-keyword">as</span> user<br>participant <span class="hljs-string">&quot;External Provisioner&quot;</span> <span class="hljs-keyword">as</span> provisioner<br>participant <span class="hljs-string">&quot;External Attacher&quot;</span> <span class="hljs-keyword">as</span> attacher<br>participant <span class="hljs-string">&quot;CSI插件&quot;</span> <span class="hljs-keyword">as</span> csidriver #lightgreen<br>participant <span class="hljs-string">&quot;API服务器&quot;</span> <span class="hljs-keyword">as</span> apiserver #lightblue<br>participant <span class="hljs-string">&quot;调度器&quot;</span> <span class="hljs-keyword">as</span> scheduler #lightblue<br>participant <span class="hljs-string">&quot;PV控制器&quot;</span> <span class="hljs-keyword">as</span> pvcontroller<br>participant <span class="hljs-string">&quot;AD控制器&quot;</span> <span class="hljs-keyword">as</span> adcontroller<br>participant <span class="hljs-string">&quot;kubelet&quot;</span> <span class="hljs-keyword">as</span> kubelet #lightblue<br><br>== 调度 ==<br>autonumber<br>activate user<br><span class="hljs-function"><span class="hljs-title">user</span> -&gt;</span> apiserver: 用户创建Pod(<span class="hljs-keyword">with</span> PVC)<br>activate apiserver<br>activate scheduler<br><span class="hljs-function"><span class="hljs-title">scheduler</span> -&gt;</span> apiserver: watch Pod，发起调度流程<br><br>== Provision == <br>activate pvcontroller<br><span class="hljs-function"><span class="hljs-title">pvcontroller</span> -&gt;</span> apiserver: watch PVC<br>alt 集群有符合需求的PV<br>    <span class="hljs-function"><span class="hljs-title">pvcontroller</span> -&gt;</span> apiserver: 绑定PVC&amp;PV<br><span class="hljs-keyword">else</span> 集群没有符合需求的PV<br>    <span class="hljs-function"><span class="hljs-title">pvcontroller</span> -&gt;</span> apiserver: <span class="hljs-keyword">do</span> nothing<br>end<br>activate provisioner<br><span class="hljs-function"><span class="hljs-title">provisioner</span> -&gt;</span> apiserver: watch PVC<br><span class="hljs-function"><span class="hljs-title">provisioner</span> -&gt;</span> csidriver: 调用CSI插件的Provision相关函数<br>activate csidriver<br><span class="hljs-function"><span class="hljs-title">csidriver</span> -&gt;</span> csidriver:  创建存储卷<br><span class="hljs-function"><span class="hljs-title">csidriver</span> -&gt;</span> provisioner: 创建成功<br><span class="hljs-function"><span class="hljs-title">provisioner</span> -&gt;</span> apiserver: 绑定PVC&amp;PV<br><span class="hljs-function"><span class="hljs-title">scheduler</span> -&gt;</span> apiserver: 绑定Pod与Node，调度结束(Immediate)<br><br>== Attach ==<br>activate adcontroller<br><span class="hljs-function"><span class="hljs-title">adcontroller</span> -&gt;</span> apiserver: watch Pod&amp;PV，发起attach<br><span class="hljs-function"><span class="hljs-title">adcontroller</span> -&gt;</span> apiserver: 创建VolumeAttachment资源<br><span class="hljs-function"><span class="hljs-title">attacher</span> -&gt;</span> apiserver: watch到新的VolumeAttachment资源<br><span class="hljs-function"><span class="hljs-title">attacher</span> -&gt;</span> csidriver: 调用CSI插件的Attach相关函数<br><span class="hljs-function"><span class="hljs-title">csidriver</span> -&gt;</span> csidriver: 将存储卷附着到节点<br><span class="hljs-function"><span class="hljs-title">csidriver</span> -&gt;</span> apiserver: 将VolumeAttachment标记为Attached<br><br>== Mount ==<br>activate kubelet<br><span class="hljs-function"><span class="hljs-title">kubelet</span> -&gt;</span> csidriver: VolumeManager组件调用Mount相关函数<br><span class="hljs-function"><span class="hljs-title">csidriver</span> -&gt;</span> csidriver: 将存储卷挂载到全局目录和Pod目录<br><span class="hljs-function"><span class="hljs-title">csidriver</span> -&gt;</span> kubelet: 挂载成功<br><span class="hljs-function"><span class="hljs-title">kubelet</span> -&gt;</span> kubelet: 启动容器并使用挂载后的存储卷<br><span class="hljs-function"><span class="hljs-title">kubelet</span> -&gt;</span> apiserver: 容器启动成功，Pod Running<br><span class="hljs-function"><span class="hljs-title">apiserver</span> -&gt;</span> user: 用户开心使用挂载了存储卷的业务Pod<br><br>@enduml<br></code></pre></td></tr></table></figure>
+<p>画出来的效果虽然有点复古..但胜在好用且方便</p>
+<p><img src="/images/pod_plantuml.png" /></p>
+]]></content>
+      <categories>
+        <category>专业</category>
+        <category>工具</category>
+        <category>编辑器</category>
+        <category>PlantUML</category>
+      </categories>
+      <tags>
+        <tag>UML</tag>
+        <tag>tools</tag>
+      </tags>
+  </entry>
+  <entry>
+    <title>golang常用包系列: resource</title>
+    <url>/2021/11/04/resource-package/</url>
+    <content><![CDATA[<h1 id="简介">简介</h1>
+<p>resource库封装了golang常用的数据量，包括三种格式：指数形式、二进制幂、十进制幂。Kubernetes中使用resource.Quantity存储和运算内存、cpu和存储等数据。</p>
+<span id="more"></span>
+<figure class="highlight isbl"><table><tr><td class="code"><pre><code class="hljs isbl"><span class="hljs-variable">const</span> (<br>	<span class="hljs-variable">DecimalExponent</span> = <span class="hljs-function"><span class="hljs-title"><span class="hljs-built_in">Format</span></span>(<span class="hljs-string">&quot;DecimalExponent&quot;</span>) <span class="hljs-comment">// e.g., 12e6</span></span><br><span class="hljs-function">	<span class="hljs-variable">BinarySI</span>        = <span class="hljs-title"><span class="hljs-built_in">Format</span></span>(<span class="hljs-string">&quot;BinarySI&quot;</span>)        <span class="hljs-comment">// e.g., 12Mi (12 * 2^20)</span></span><br><span class="hljs-function">	<span class="hljs-variable">DecimalSI</span>       = <span class="hljs-title"><span class="hljs-built_in">Format</span></span>(<span class="hljs-string">&quot;DecimalSI&quot;</span>)       <span class="hljs-comment">// e.g., 12M  (12 * 10^6)</span></span><br><span class="hljs-function">)</span><br></code></pre></td></tr></table></figure>
+<h1 id="数据结构">数据结构</h1>
+<p>Quantity本质上是数字的定点表示形式，提供了String()和AsInt64()访问器，和JSON, YAML marshal/unmarshal <figure class="highlight gauss"><table><tr><td class="code"><pre><code class="hljs gauss"><span class="hljs-built_in">type</span> Quantity <span class="hljs-keyword">struct</span> &#123;<br>	<span class="hljs-comment">// i is the quantity in int64 scaled form, if d.Dec == nil</span><br>	i int64Amount<br>	<span class="hljs-comment">// d is the quantity in inf.Dec form if d.Dec != nil</span><br>	d infDecAmount<br>	<span class="hljs-comment">// s is the generated value of this quantity to avoid recalculation</span><br>	s <span class="hljs-keyword">string</span><br>	<span class="hljs-comment">// Change Format at will. See the comment for Canonicalize for</span><br>	<span class="hljs-comment">// more details.</span><br>	<span class="hljs-keyword">Format</span><br>&#125;<br><span class="hljs-built_in">type</span> infDecAmount <span class="hljs-keyword">struct</span> &#123;<br>	*inf.Dec<br>&#125;<br><span class="hljs-comment">// Format lists the three possible formattings of a quantity.</span><br><span class="hljs-built_in">type</span> <span class="hljs-keyword">Format</span> <span class="hljs-keyword">string</span><br></code></pre></td></tr></table></figure></p>
+<p>可以直接通过quantity.Format获取该Quantity的格式，比如DecimalExponent, BinarySI或DemicalSI</p>
+<h1 id="常用方法">常用方法</h1>
+<h2 id="创建并初始化quantity">1 创建并初始化Quantity</h2>
+<h3 id="从字符串解析">1.1 从字符串解析</h3>
+<figure class="highlight go"><table><tr><td class="code"><pre><code class="hljs go"><span class="hljs-function"><span class="hljs-keyword">func</span> <span class="hljs-title">MustParse</span><span class="hljs-params">(str <span class="hljs-keyword">string</span>)</span> <span class="hljs-title">Quantity</span></span><br><span class="hljs-function"><span class="hljs-keyword">func</span> <span class="hljs-title">ParseQuantity</span><span class="hljs-params">(str <span class="hljs-keyword">string</span>)</span> <span class="hljs-params">(Quantity, error)</span></span><br></code></pre></td></tr></table></figure>
+<figure class="highlight stylus"><table><tr><td class="code"><pre><code class="hljs stylus">package <span class="hljs-selector-tag">main</span><br>import (<br>	<span class="hljs-string">&quot;fmt&quot;</span><br>	<span class="hljs-string">&quot;k8s.io/apimachinery/pkg/api/resource&quot;</span><br>)<br>func <span class="hljs-selector-tag">main</span>() &#123;<br>	memorySize := resource<span class="hljs-selector-class">.MustParse</span>(<span class="hljs-string">&quot;5Gi&quot;</span>)<br>	fmt<span class="hljs-selector-class">.Printf</span>(<span class="hljs-string">&quot;memorySize = %v (%v)\n&quot;</span>, memorySize<span class="hljs-selector-class">.Value</span>(), memorySize.Format)<br>	diskSize := resource<span class="hljs-selector-class">.MustParse</span>(<span class="hljs-string">&quot;5G&quot;</span>)<br>	fmt<span class="hljs-selector-class">.Printf</span>(<span class="hljs-string">&quot;diskSize = %v (%v)\n&quot;</span>, diskSize<span class="hljs-selector-class">.Value</span>(), diskSize.Format)<br>	cores := resource<span class="hljs-selector-class">.MustParse</span>(<span class="hljs-string">&quot;5300m&quot;</span>)<br>	fmt<span class="hljs-selector-class">.Printf</span>(<span class="hljs-string">&quot;milliCores = %v (%v)\n&quot;</span>, cores<span class="hljs-selector-class">.MilliValue</span>(), cores.Format)<br>	cores2 := resource<span class="hljs-selector-class">.MustParse</span>(<span class="hljs-string">&quot;5.4&quot;</span>)<br>	fmt<span class="hljs-selector-class">.Printf</span>(<span class="hljs-string">&quot;milliCores = %v (%v)\n&quot;</span>, cores2<span class="hljs-selector-class">.MilliValue</span>(), cores2.Format)<br>&#125;<br></code></pre></td></tr></table></figure>
+<figure class="highlight makefile"><table><tr><td class="code"><pre><code class="hljs makefile"><span class="hljs-section">Output:</span><br>memorySize = 5368709120 (BinarySI)<br>diskSize = 5000000000 (DecimalSI)<br>milliCores = 5300 (DecimalSI)<br>milliCores = 5400 (DecimalSI)<br></code></pre></td></tr></table></figure>
+<h3 id="从数字创建">1.2 从数字创建</h3>
+<figure class="highlight reasonml"><table><tr><td class="code"><pre><code class="hljs reasonml">func <span class="hljs-constructor">NewMilliQuantity(<span class="hljs-params">value</span> <span class="hljs-params">int64</span>, <span class="hljs-params">format</span> Format)</span> *Quantity<br></code></pre></td></tr></table></figure>
+<figure class="highlight reasonml"><table><tr><td class="code"><pre><code class="hljs reasonml">func <span class="hljs-constructor">NewQuantity(<span class="hljs-params">value</span> <span class="hljs-params">int64</span>, <span class="hljs-params">format</span> Format)</span> *Quantity<br></code></pre></td></tr></table></figure>
+<figure class="highlight fortran"><table><tr><td class="code"><pre><code class="hljs fortran">func NewScaledQuantity(<span class="hljs-keyword">value</span> int64, <span class="hljs-built_in">scale</span> <span class="hljs-built_in">Scale</span>) *Quantity<br>//<span class="hljs-built_in">Scale</span>用于获取和设置以<span class="hljs-number">10</span>为基数的缩放值。为了简化，不包括以<span class="hljs-number">2</span>为底的缩放。<br><span class="hljs-keyword">type</span> <span class="hljs-built_in">Scale</span> int32<br>const (<br>	Nano  <span class="hljs-built_in">Scale</span> = -<span class="hljs-number">9</span><br>	Micro <span class="hljs-built_in">Scale</span> = -<span class="hljs-number">6</span><br>	Milli <span class="hljs-built_in">Scale</span> = -<span class="hljs-number">3</span><br>	Kilo  <span class="hljs-built_in">Scale</span> = <span class="hljs-number">3</span><br>	Mega  <span class="hljs-built_in">Scale</span> = <span class="hljs-number">6</span><br>	Giga  <span class="hljs-built_in">Scale</span> = <span class="hljs-number">9</span><br>	Tera  <span class="hljs-built_in">Scale</span> = <span class="hljs-number">12</span><br>	Peta  <span class="hljs-built_in">Scale</span> = <span class="hljs-number">15</span><br>	Exa   <span class="hljs-built_in">Scale</span> = <span class="hljs-number">18</span><br>)<br></code></pre></td></tr></table></figure>
+<h3 id="赋值操作">1.3 赋值操作</h3>
+<figure class="highlight go"><table><tr><td class="code"><pre><code class="hljs go"><span class="hljs-function"><span class="hljs-keyword">func</span> <span class="hljs-params">(q *Quantity)</span> <span class="hljs-title">Set</span><span class="hljs-params">(value <span class="hljs-keyword">int64</span>)</span></span><br></code></pre></td></tr></table></figure>
+<figure class="highlight go"><table><tr><td class="code"><pre><code class="hljs go"><span class="hljs-function"><span class="hljs-keyword">func</span> <span class="hljs-params">(q *Quantity)</span> <span class="hljs-title">SetMilli</span><span class="hljs-params">(value <span class="hljs-keyword">int64</span>)</span>	// <span class="hljs-title">q</span>的值为<span class="hljs-title">value</span> * 1/1000</span><br></code></pre></td></tr></table></figure>
+<figure class="highlight reasonml"><table><tr><td class="code"><pre><code class="hljs reasonml">func (q *Quantity) <span class="hljs-constructor">SetScaled(<span class="hljs-params">value</span> <span class="hljs-params">int64</span>, <span class="hljs-params">scale</span> Scale)</span>	<span class="hljs-comment">//value * 10^scale</span><br></code></pre></td></tr></table></figure>
+<h2 id="运算">2 运算</h2>
+<h3 id="大小比较">2.1 大小比较</h3>
+<h4 id="quantity与quantity比较">2.1.1 Quantity与Quantity比较</h4>
+<p>如果数量等于y，则Cmp返回0；如果数量小于y，则Cmp返回-1；如果数量大于y，则Cmp返回1</p>
+<figure class="highlight autoit"><table><tr><td class="code"><pre><code class="hljs autoit"><span class="hljs-function"><span class="hljs-keyword">func</span> <span class="hljs-params">(q *Quantity)</span> <span class="hljs-title">Cmp</span><span class="hljs-params">(y Quantity)</span> <span class="hljs-title">int</span></span><br></code></pre></td></tr></table></figure>
+<h4 id="quantity与int64比较">2.1.2 Quantity与int64比较</h4>
+<figure class="highlight go"><table><tr><td class="code"><pre><code class="hljs go"><span class="hljs-function"><span class="hljs-keyword">func</span> <span class="hljs-params">(q *Quantity)</span> <span class="hljs-title">CmpInt64</span><span class="hljs-params">(y <span class="hljs-keyword">int64</span>)</span> <span class="hljs-title">int</span></span><br></code></pre></td></tr></table></figure>
+<h4 id="其他">2.1.3 其他</h4>
+<p>判断是否为零值</p>
+<figure class="highlight autoit"><table><tr><td class="code"><pre><code class="hljs autoit"><span class="hljs-function"><span class="hljs-keyword">func</span> <span class="hljs-params">(q *Quantity)</span> <span class="hljs-title">IsZero</span><span class="hljs-params">()</span> <span class="hljs-title">bool</span></span><br></code></pre></td></tr></table></figure>
+<p>判断是否相等 <figure class="highlight autoit"><table><tr><td class="code"><pre><code class="hljs autoit"><span class="hljs-function"><span class="hljs-keyword">func</span> <span class="hljs-params">(q Quantity)</span> <span class="hljs-title">Equal</span><span class="hljs-params">(v Quantity)</span> <span class="hljs-title">bool</span></span><br></code></pre></td></tr></table></figure></p>
+<h3 id="取整四舍五入操作">2.2 取整（四舍五入）操作</h3>
+<figure class="highlight autoit"><table><tr><td class="code"><pre><code class="hljs autoit"><span class="hljs-function"><span class="hljs-keyword">func</span> <span class="hljs-params">(q *Quantity)</span> <span class="hljs-title">RoundUp</span><span class="hljs-params">(scale Scale)</span> <span class="hljs-title">bool</span></span><br></code></pre></td></tr></table></figure>
+<p>根据给定的scale缩放值(scale &gt;=1)原地更新quantity，如果舍入操作导致精度丢失，则返回False。负数的RoundUp操作与证书相反，往远离0的方向：比如-9 scale 1四舍五入为-10</p>
+<h3 id="减法">2.3 减法</h3>
+<p>Sub()从当前的当前值中减去y的数量，是一个in-place操作。如果当前值为零，则数量的格式将更新为y的格式。</p>
+<figure class="highlight autoit"><table><tr><td class="code"><pre><code class="hljs autoit"><span class="hljs-function"><span class="hljs-keyword">func</span> <span class="hljs-params">(q *Quantity)</span> <span class="hljs-title">Sub</span><span class="hljs-params">(y Quantity)</span></span><br></code></pre></td></tr></table></figure>
+<h3 id="取反">2.4 取反</h3>
+<p>inplace操作，原地取反</p>
+<figure class="highlight autoit"><table><tr><td class="code"><pre><code class="hljs autoit"><span class="hljs-function"><span class="hljs-keyword">func</span> <span class="hljs-params">(q *Quantity)</span> <span class="hljs-title">Neg</span><span class="hljs-params">()</span></span><br></code></pre></td></tr></table></figure>
+<h3 id="自我类型更新">2.5 自我类型更新</h3>
+<p>inplace操作，ToDec使用inf.Dec表示形式原地更新，并返回自身。</p>
+<figure class="highlight stylus"><table><tr><td class="code"><pre><code class="hljs stylus">func (<span class="hljs-selector-tag">q</span> *Quantity) ToDec() *Quantity &#123;<br>	<span class="hljs-keyword">if</span> <span class="hljs-selector-tag">q</span><span class="hljs-selector-class">.d</span><span class="hljs-selector-class">.Dec</span> == nil &#123;<br>		<span class="hljs-selector-tag">q</span><span class="hljs-selector-class">.d</span><span class="hljs-selector-class">.Dec</span> = <span class="hljs-selector-tag">q</span><span class="hljs-selector-class">.i</span><span class="hljs-selector-class">.AsDec</span>()<br>		<span class="hljs-selector-tag">q</span><span class="hljs-selector-class">.i</span> = int64Amount&#123;&#125;<br>	&#125;<br>	return <span class="hljs-selector-tag">q</span><br>&#125;<br></code></pre></td></tr></table></figure>
+<p>也就是将q.i转换为inf.Dec类型之后，赋值给q.d，然后q.i设置为0</p>
+<h2 id="类型转换">3. 类型转换</h2>
+<h3 id="转换为float64">3.1 转换为float64</h3>
+<p>可能丢失精度，如果quantity值小于float64 -Inf或者大于+Inf</p>
+<figure class="highlight autoit"><table><tr><td class="code"><pre><code class="hljs autoit"><span class="hljs-function"><span class="hljs-keyword">func</span> <span class="hljs-params">(q *Quantity)</span> <span class="hljs-title">AsApproximateFloat64</span><span class="hljs-params">()</span> <span class="hljs-title">float64</span></span><br></code></pre></td></tr></table></figure>
+<h3 id="转换为inf.dec">3.2 转换为inf.Dec</h3>
+<p>直接返回q.d.Dec：</p>
+<figure class="highlight stylus"><table><tr><td class="code"><pre><code class="hljs stylus">func (<span class="hljs-selector-tag">q</span> *Quantity) AsDec() *inf<span class="hljs-selector-class">.Dec</span><br><span class="hljs-comment">// AsDec returns the quantity as represented by a scaled inf.Dec.</span><br>func (<span class="hljs-selector-tag">q</span> *Quantity) AsDec() *inf<span class="hljs-selector-class">.Dec</span> &#123;<br>	<span class="hljs-keyword">if</span> <span class="hljs-selector-tag">q</span><span class="hljs-selector-class">.d</span><span class="hljs-selector-class">.Dec</span> != nil &#123;<br>		return <span class="hljs-selector-tag">q</span><span class="hljs-selector-class">.d</span><span class="hljs-selector-class">.Dec</span><br>	&#125;<br>	<span class="hljs-selector-tag">q</span><span class="hljs-selector-class">.d</span><span class="hljs-selector-class">.Dec</span> = <span class="hljs-selector-tag">q</span><span class="hljs-selector-class">.i</span><span class="hljs-selector-class">.AsDec</span>()<br>	<span class="hljs-selector-tag">q</span><span class="hljs-selector-class">.i</span> = int64Amount&#123;&#125;<br>	return <span class="hljs-selector-tag">q</span><span class="hljs-selector-class">.d</span><span class="hljs-selector-class">.Dec</span><br>&#125;<br></code></pre></td></tr></table></figure>
+<p>由于是直接返回指针，所以对q.AsDec()进行Dec封装的方法调用时，可以原地更新q</p>
+<p>比如自定义Quantity的乘法：</p>
+<figure class="highlight stylus"><table><tr><td class="code"><pre><code class="hljs stylus"><span class="hljs-comment">// multiBy multiplies the provided quantity from the current value in place</span><br>func multiBy(x, y resource.Quantity) resource<span class="hljs-selector-class">.Quantity</span> &#123;<br>	<span class="hljs-keyword">if</span> y<span class="hljs-selector-class">.CmpInt64</span>(<span class="hljs-number">1</span>) == <span class="hljs-number">0</span> &#123;<br>		return x<br>	&#125;<br>	rst := resource<span class="hljs-selector-class">.NewQuantity</span>(x<span class="hljs-selector-class">.Value</span>(), x.Format)<br>	rst<span class="hljs-selector-class">.AsDec</span>()<span class="hljs-selector-class">.Mul</span>(x<span class="hljs-selector-class">.AsDec</span>(), y<span class="hljs-selector-class">.AsDec</span>())<br>	return *rst<br>&#125;<br></code></pre></td></tr></table></figure>
+<p><code>rst.AsDec().Mul()</code>借助<code>inf.Dec</code>的<code>Mul()</code>方法，实现rst的原地更新</p>
+<figure class="highlight"><table><tr><td class="code"><pre><code class="hljs"><br></code></pre></td></tr></table></figure>
+<p><strong>inf.Dec</strong></p>
+<p>inf包（类型inf.Dec）实现了“无限精度”十进制算法。“无限精度”描述了两个特征：十进制数表示实际上具有无限精度，并且不支持使用任何特定的固定精度进行计算。 （尽管对精度没有实际限制，但inf.Dec只能表示有限的小数。）</p>
+<figure class="highlight gauss"><table><tr><td class="code"><pre><code class="hljs gauss"><span class="hljs-built_in">type</span> Dec <span class="hljs-keyword">struct</span> &#123;<br>	unscaled big.Int<br>	<span class="hljs-built_in">scale</span>    <span class="hljs-built_in">Scale</span><br>&#125;<br><span class="hljs-comment">// Scale represents the type used for the scale of a Dec.</span><br><span class="hljs-built_in">type</span> <span class="hljs-built_in">Scale</span> int32<br></code></pre></td></tr></table></figure>
+<p>Dec的数学值为:</p>
+<figure class="highlight apache"><table><tr><td class="code"><pre><code class="hljs apache"><span class="hljs-attribute">unscaled</span> * <span class="hljs-number">10</span>**(-scale)<br></code></pre></td></tr></table></figure>
+<p>请注意，不同的Dec表示形式可能具有相等的数学值，Dec的零值表示小数位数为0的值0。</p>
+<figure class="highlight asciidoc"><table><tr><td class="code"><pre><code class="hljs asciidoc"><span class="hljs-section">unscaled  scale  String()</span><br><span class="hljs-section">-------------------------</span><br><span class="hljs-code">       0      0    &quot;0&quot;</span><br><span class="hljs-code">       0      2    &quot;0.00&quot;</span><br><span class="hljs-code">       0     -2    &quot;0&quot;</span><br><span class="hljs-code">       1      0    &quot;1&quot;</span><br><span class="hljs-code">     100      2    &quot;1.00&quot;</span><br><span class="hljs-code">      10      0   &quot;10&quot;</span><br><span class="hljs-code">       1     -1   &quot;10&quot;</span><br></code></pre></td></tr></table></figure>
+<h3 id="转换为string">3.3 转换为String</h3>
+<figure class="highlight autoit"><table><tr><td class="code"><pre><code class="hljs autoit"><span class="hljs-function"><span class="hljs-keyword">func</span> <span class="hljs-params">(q *Quantity)</span> <span class="hljs-title">String</span><span class="hljs-params">()</span> <span class="hljs-title">string</span></span><br></code></pre></td></tr></table></figure>
+<h3 id="转换为int64">3.4 转换为Int64</h3>
+<p>如果可以进行快速转换，则AsInt64将当前值的表示形式返回为int64。如果返回false，则调用者必须使用此数量的inf.Dec形式。</p>
+<figure class="highlight go"><table><tr><td class="code"><pre><code class="hljs go"><span class="hljs-function"><span class="hljs-keyword">func</span> <span class="hljs-params">(q *Quantity)</span> <span class="hljs-title">AsInt64</span><span class="hljs-params">()</span> <span class="hljs-params">(<span class="hljs-keyword">int64</span>, <span class="hljs-keyword">bool</span>)</span></span><br></code></pre></td></tr></table></figure>
+<h3 id="转换为scale">3.5 转换为Scale</h3>
+<p>AsScale返回当前值，四舍五入到提供的缩放比例，如果缩放导致精度损失，则返回false</p>
+<figure class="highlight go"><table><tr><td class="code"><pre><code class="hljs go"><span class="hljs-function"><span class="hljs-keyword">func</span> <span class="hljs-params">(q *Quantity)</span> <span class="hljs-title">AsScale</span><span class="hljs-params">(scale Scale)</span> <span class="hljs-params">(CanonicalValue, <span class="hljs-keyword">bool</span>)</span></span><br><span class="hljs-comment">// CanonicalValue允许将Quantity转换为字符串</span><br><span class="hljs-keyword">type</span> CanonicalValue <span class="hljs-keyword">interface</span> &#123;<br>	<span class="hljs-comment">// AsCanonicalBytes returns a byte array representing the string representation</span><br>	<span class="hljs-comment">// of the value mantissa and an int32 representing its exponent in base-10. Callers may</span><br>	<span class="hljs-comment">// pass a byte slice to the method to avoid allocations.</span><br>	AsCanonicalBytes(out []<span class="hljs-keyword">byte</span>) ([]<span class="hljs-keyword">byte</span>, <span class="hljs-keyword">int32</span>)<br>	<span class="hljs-comment">// AsCanonicalBase1024Bytes returns a byte array representing the string representation</span><br>	<span class="hljs-comment">// of the value mantissa and an int32 representing its exponent in base-1024. Callers</span><br>	<span class="hljs-comment">// may pass a byte slice to the method to avoid allocations.</span><br>	AsCanonicalBase1024Bytes(out []<span class="hljs-keyword">byte</span>) ([]<span class="hljs-keyword">byte</span>, <span class="hljs-keyword">int32</span>)<br>&#125;<br></code></pre></td></tr></table></figure>
+<h3 id="其他-1">其他</h3>
+<figure class="highlight go"><table><tr><td class="code"><pre><code class="hljs go"><span class="hljs-function"><span class="hljs-keyword">func</span> <span class="hljs-params">(q *Quantity)</span> <span class="hljs-title">AsCanonicalBytes</span><span class="hljs-params">(out []<span class="hljs-keyword">byte</span>)</span> <span class="hljs-params">(result []<span class="hljs-keyword">byte</span>, exponent <span class="hljs-keyword">int32</span>)</span></span><br></code></pre></td></tr></table></figure>
+<figure class="highlight go"><table><tr><td class="code"><pre><code class="hljs go"><span class="hljs-function"><span class="hljs-keyword">func</span> <span class="hljs-params">(q *Quantity)</span> <span class="hljs-title">CanonicalizeBytes</span><span class="hljs-params">(out []<span class="hljs-keyword">byte</span>)</span> <span class="hljs-params">(result, suffix []<span class="hljs-keyword">byte</span>)</span></span><br></code></pre></td></tr></table></figure>
+<figure class="highlight go"><table><tr><td class="code"><pre><code class="hljs go"><span class="hljs-comment">// ToUnstructured实现value.UnstructuredConverter接口。</span><br><span class="hljs-function"><span class="hljs-keyword">func</span> <span class="hljs-params">(q Quantity)</span> <span class="hljs-title">ToUnstructured</span><span class="hljs-params">()</span> <span class="hljs-title">interface</span></span>&#123;&#125;<br></code></pre></td></tr></table></figure>
+<figure class="highlight go"><table><tr><td class="code"><pre><code class="hljs go"><span class="hljs-comment">// UnmarshalJSON实现json.Unmarshaller接口。</span><br><span class="hljs-comment">// <span class="hljs-doctag">TODO:</span>删除对前导/尾随空格的支持</span><br><span class="hljs-function"><span class="hljs-keyword">func</span> <span class="hljs-params">(m *Quantity)</span> <span class="hljs-title">Unmarshal</span><span class="hljs-params">(data []<span class="hljs-keyword">byte</span>)</span> <span class="hljs-title">error</span></span><br></code></pre></td></tr></table></figure>
+<figure class="highlight go"><table><tr><td class="code"><pre><code class="hljs go"><span class="hljs-comment">// UnmarshalJSON实现json.Unmarshaller接口。</span><br><span class="hljs-comment">// TODO：删除对前导/尾随空格的支持</span><br><span class="hljs-function"><span class="hljs-keyword">func</span> <span class="hljs-params">(q *Quantity)</span> <span class="hljs-title">UnmarshalJSON</span><span class="hljs-params">(value []<span class="hljs-keyword">byte</span>)</span> <span class="hljs-title">error</span></span><br></code></pre></td></tr></table></figure>
+<h2 id="获取quantity内部信息">4. 获取quantity内部信息</h2>
+<h3 id="取符号">取符号</h3>
+<figure class="highlight autoit"><table><tr><td class="code"><pre><code class="hljs autoit"><span class="hljs-function"><span class="hljs-keyword">func</span> <span class="hljs-params">(q *Quantity)</span> <span class="hljs-title">Sign</span><span class="hljs-params">()</span> <span class="hljs-title">int</span></span><br></code></pre></td></tr></table></figure>
+<h3 id="取值">取值</h3>
+<p>返回未缩放的q值，该值四舍五入为最接近0的整数。与AsInt64()不同，不做是否丢失精度的判断</p>
+<figure class="highlight autoit"><table><tr><td class="code"><pre><code class="hljs autoit"><span class="hljs-function"><span class="hljs-keyword">func</span> <span class="hljs-params">(q *Quantity)</span> <span class="hljs-title">Value</span><span class="hljs-params">()</span> <span class="hljs-title">int64</span></span><br></code></pre></td></tr></table></figure>
+<figure class="highlight autoit"><table><tr><td class="code"><pre><code class="hljs autoit"><span class="hljs-function"><span class="hljs-keyword">func</span> <span class="hljs-params">(q *Quantity)</span> <span class="hljs-title">MilliValue</span><span class="hljs-params">()</span> <span class="hljs-title">int64</span> // <span class="hljs-title">MilliValue</span>返回<span class="hljs-title">ceil</span><span class="hljs-params">(q * <span class="hljs-number">1000</span>)</span>的值；这可能会溢出<span class="hljs-title">int64</span>;请首先调用<span class="hljs-title">Value</span><span class="hljs-params">()</span>以验证数字是否足够小。</span><br></code></pre></td></tr></table></figure>
+<p>ref:</p>
+<p>https://pkg.go.dev/k8s.io/apimachinery/pkg/api/resource</p>
+]]></content>
+      <categories>
+        <category>专业</category>
+        <category>开发</category>
+        <category>golang</category>
+      </categories>
+      <tags>
+        <tag>golang</tag>
+        <tag>resource</tag>
+      </tags>
+  </entry>
+  <entry>
     <title>如何给git设置代理 (HTTPS/SSH)</title>
     <url>/2021/11/26/git-proxy-configuration/</url>
-    <content><![CDATA[<h2 id="解决问题"><a href="#解决问题" class="headerlink" title="解决问题"></a>解决问题</h2><p>开发者经常需要在终端和github之间进行repository的push/pull等操作，但是由于GFW的存在，不得不通过代理保障github访问的流畅度（太不友好..）。本文简单介绍如何给github配置HTTPs和SSH代理，让开发者对代理无感知丝滑使用。</p>
+    <content><![CDATA[<h2 id="解决问题">解决问题</h2>
+<p>开发者经常需要在终端和github之间进行repository的push/pull等操作，但是由于GFW的存在，不得不通过代理保障github访问的流畅度（太不友好..）。本文简单介绍如何给github配置HTTPs和SSH代理，让开发者对代理无感知丝滑使用。</p>
 <span id="more"></span>
-
-<h2 id="分辨需要设置的代理"><a href="#分辨需要设置的代理" class="headerlink" title="分辨需要设置的代理"></a>分辨需要设置的代理</h2><ul>
-<li>HTTP 形式：<blockquote>
-<p>git clone <a href="https://github.com/owner/git.git">https://github.com/owner/git.git</a></p>
-</blockquote>
-</li>
-<li>SSH 形式：<blockquote>
-<p>git clone <a href="mailto:&#x67;&#x69;&#116;&#x40;&#x67;&#x69;&#116;&#x68;&#117;&#x62;&#46;&#x63;&#x6f;&#x6d;">&#x67;&#x69;&#116;&#x40;&#x67;&#x69;&#116;&#x68;&#117;&#x62;&#46;&#x63;&#x6f;&#x6d;</a>:owner/git.git</p>
-</blockquote>
-</li>
+<h2 id="分辨需要设置的代理">分辨需要设置的代理</h2>
+<ul>
+<li><p>HTTP 形式：</p>
+<blockquote>
+<p>git clone https://github.com/owner/git.git</p>
+</blockquote></li>
+<li><p>SSH 形式：</p>
+<blockquote>
+<p>git clone git@github.com:owner/git.git</p>
+</blockquote></li>
 </ul>
-<h2 id="HTTP-形式"><a href="#HTTP-形式" class="headerlink" title="HTTP 形式"></a>HTTP 形式</h2><h3 id="走-HTTP-代理"><a href="#走-HTTP-代理" class="headerlink" title="走 HTTP 代理"></a>走 HTTP 代理</h3><figure class="highlight bash"><table><tr><td class="code"><pre><code class="hljs bash">git config --global http.proxy <span class="hljs-string">&quot;http://127.0.0.1:8080&quot;</span><br>git config --global https.proxy <span class="hljs-string">&quot;http://127.0.0.1:8080&quot;</span><br></code></pre></td></tr></table></figure>
-
-<h3 id="走-socks5-代理（如-Shadowsocks）"><a href="#走-socks5-代理（如-Shadowsocks）" class="headerlink" title="走 socks5 代理（如 Shadowsocks）"></a>走 socks5 代理（如 Shadowsocks）</h3><figure class="highlight bash"><table><tr><td class="code"><pre><code class="hljs bash">git config --global http.proxy <span class="hljs-string">&quot;socks5://127.0.0.1:1080&quot;</span><br>git config --global https.proxy <span class="hljs-string">&quot;socks5://127.0.0.1:1080&quot;</span><br></code></pre></td></tr></table></figure>
-
-<h3 id="取消设置"><a href="#取消设置" class="headerlink" title="取消设置"></a>取消设置</h3><figure class="highlight bash"><table><tr><td class="code"><pre><code class="hljs bash">git config --global --<span class="hljs-built_in">unset</span> http.proxy<br>git config --global --<span class="hljs-built_in">unset</span> https.proxy<br></code></pre></td></tr></table></figure>
-
-<h2 id="SSH-形式"><a href="#SSH-形式" class="headerlink" title="SSH 形式"></a>SSH 形式</h2><p>修改 <code>~/.ssh/config</code> 文件（不存在则新建）：</p>
+<h2 id="http-形式">HTTP 形式</h2>
+<h3 id="走-http-代理">走 HTTP 代理</h3>
+<figure class="highlight bash"><table><tr><td class="code"><pre><code class="hljs bash">git config --global http.proxy <span class="hljs-string">&quot;http://127.0.0.1:8080&quot;</span><br>git config --global https.proxy <span class="hljs-string">&quot;http://127.0.0.1:8080&quot;</span><br></code></pre></td></tr></table></figure>
+<h3 id="走-socks5-代理如-shadowsocks">走 socks5 代理（如 Shadowsocks）</h3>
+<figure class="highlight bash"><table><tr><td class="code"><pre><code class="hljs bash">git config --global http.proxy <span class="hljs-string">&quot;socks5://127.0.0.1:1080&quot;</span><br>git config --global https.proxy <span class="hljs-string">&quot;socks5://127.0.0.1:1080&quot;</span><br></code></pre></td></tr></table></figure>
+<h3 id="取消设置">取消设置</h3>
+<figure class="highlight bash"><table><tr><td class="code"><pre><code class="hljs bash">git config --global --<span class="hljs-built_in">unset</span> http.proxy<br>git config --global --<span class="hljs-built_in">unset</span> https.proxy<br></code></pre></td></tr></table></figure>
+<h2 id="ssh-形式">SSH 形式</h2>
+<p>修改 <code>~/.ssh/config</code> 文件（不存在则新建）：</p>
 <figure class="highlight crmsh"><table><tr><td class="code"><pre><code class="hljs crmsh"><span class="hljs-comment"># 必须是 github.com</span><br>Host github.com<br>   HostName github.com<br>   <span class="hljs-keyword">User</span> <span class="hljs-title">git</span><br>   <span class="hljs-comment"># 走 HTTP 代理</span><br>   <span class="hljs-comment"># ProxyCommand socat - PROXY:127.0.0.1:%h:%p,proxyport=8080</span><br>   <span class="hljs-comment"># 走 socks5 代理（如 Shadowsocks）</span><br>   <span class="hljs-comment"># ProxyCommand nc -v -x 127.0.0.1:1080 %h %p</span><br></code></pre></td></tr></table></figure>
 ]]></content>
       <categories>
@@ -158,147 +375,20 @@
       </tags>
   </entry>
   <entry>
-    <title>PlantUML使用姿势</title>
-    <url>/2021/11/03/plantUML/</url>
-    <content><![CDATA[<p>发现一个在线画时序图的工具PlantUML，该工具提供vscode插件，可以使用代码编辑时序图逻辑，并实时预览。</p>
-<span id="more"></span>
-
-<h3 id="vscode插件安装和使用方法"><a href="#vscode插件安装和使用方法" class="headerlink" title="vscode插件安装和使用方法"></a>vscode插件安装和使用方法</h3><p><a href="https://marketplace.visualstudio.com/items?itemName=okazuki.okazukiplantuml">https://marketplace.visualstudio.com/items?itemName=okazuki.okazukiplantuml</a></p>
-<ul>
-<li><p><code>F1</code>唤起vscode命令行操作</p>
-</li>
-<li><p><code>PlantUML: Preview Current Diagram</code> : Start PlantUML preview.</p>
-</li>
-<li><p><code>PlantUML: Export Current Diagram -&gt; ***(*** is format type)</code> : Export png, svg, eps, etc… to same directory.</p>
-</li>
-<li><p><code>PlantUML: Extract PlantUML Diagram Source from Image</code>: 将图片还原成plantUML代码，实测时灵时不灵</p>
-</li>
-</ul>
-<h3 id="使用文档"><a href="#使用文档" class="headerlink" title="使用文档"></a>使用文档</h3><p>PlantUML提供了丰富的关键词和语法，详见<a href="https://plantuml.com/zh/sequence-diagram">https://plantuml.com/zh/sequence-diagram</a></p>
-<p>下面摘要出日常使用的几个基本语法。</p>
-<h4 id="基本用例"><a href="#基本用例" class="headerlink" title="基本用例"></a>基本用例</h4><p>序列<code>-&gt;</code> 用于绘制两个 参与者之间的信息。 参与者不必明确声明。</p>
-<p>要有一个点状的箭头，就用<code>--&gt;</code></p>
-<p>也可以用<code>&lt;-</code> 和<code>&lt;--</code> 。 这不会改变绘图，但可能提高可读性。 注意，这只适用于序列图，其他图的规则不同。</p>
-<figure class="highlight less"><table><tr><td class="code"><pre><code class="hljs less"><span class="hljs-variable">@startuml</span><br>Alice -&gt; <span class="hljs-attribute">Bob</span>: Authentication Request<br>Bob --&gt; <span class="hljs-attribute">Alice</span>: Authentication Response<br><br>Alice -&gt; <span class="hljs-attribute">Bob</span>: Another authentication Request<br>Alice &lt;-- <span class="hljs-attribute">Bob</span>: Another authentication Response<br><span class="hljs-variable">@enduml</span><br></code></pre></td></tr></table></figure>
-
-<p><a href="http://www.plantuml.com/plantuml/uml/SoWkIImgAStDuNBCoKnELT2rKt3AJx9IS2mjoKZDAybCJYp9pCzJ24ejB4qjBk42oYde0jM05MDHLLoGdrUSoeLkM5u-K5sHGY9sGo6ARNHr2QY66kwGcfS2SZ00">http://www.plantuml.com/plantuml/uml/SoWkIImgAStDuNBCoKnELT2rKt3AJx9IS2mjoKZDAybCJYp9pCzJ24ejB4qjBk42oYde0jM05MDHLLoGdrUSoeLkM5u-K5sHGY9sGo6ARNHr2QY66kwGcfS2SZ00</a></p>
-<h4 id="生命参与者"><a href="#生命参与者" class="headerlink" title="生命参与者"></a>生命参与者</h4><h5 id="participant"><a href="#participant" class="headerlink" title="participant"></a>participant</h5><p>使用 <code>participant</code> 关键字来声明一个参与者可以使你对参与者做出更多控制。</p>
-<p>关键字 <code>participant</code> 用于改变参与者的先后顺序。</p>
-<p>你也可以使用下面这些关键字来声明参与者，这会<strong>改变参与者的外观</strong>：</p>
-<ul>
-<li><code>actor</code>（角色）</li>
-<li><code>boundary</code>（边界）</li>
-<li><code>control</code>（控制）</li>
-<li><code>entity</code>（实体）</li>
-<li><code>database</code>（数据库）</li>
-<li><code>collections</code>（集合）</li>
-<li><code>queue</code>（队列）</li>
-</ul>
-<figure class="highlight xl"><table><tr><td class="code"><pre><code class="hljs xl">@startuml<br>participant participant <span class="hljs-keyword">as</span> Foo<br>actor       actor       <span class="hljs-keyword">as</span> Foo1<br>boundary    boundary    <span class="hljs-keyword">as</span> Foo2<br>control     control     <span class="hljs-keyword">as</span> Foo3<br>entity      entity      <span class="hljs-keyword">as</span> Foo4<br>database    database    <span class="hljs-keyword">as</span> Foo5<br>collections collections <span class="hljs-keyword">as</span> Foo6<br>queue       queue       <span class="hljs-keyword">as</span> Foo7<br>F<span class="hljs-function"><span class="hljs-title">oo</span> -&gt;</span> Foo1 : To actor <br>F<span class="hljs-function"><span class="hljs-title">oo</span> -&gt;</span> Foo2 : To boundary<br>F<span class="hljs-function"><span class="hljs-title">oo</span> -&gt;</span> Foo3 : To control<br>F<span class="hljs-function"><span class="hljs-title">oo</span> -&gt;</span> Foo4 : To entity<br>F<span class="hljs-function"><span class="hljs-title">oo</span> -&gt;</span> Foo5 : To database<br>F<span class="hljs-function"><span class="hljs-title">oo</span> -&gt;</span> Foo6 : To collections<br>F<span class="hljs-function"><span class="hljs-title">oo</span> -&gt;</span> Foo7 : To queue<br>@enduml<br></code></pre></td></tr></table></figure>
-
-<p><a href="http://www.plantuml.com/plantuml/uml/LP4n3iCW34Ltdu8BT6ZI95A7AbDFq0iuX069uXJCaDitmKdbCi3JVyBYYp4p9Yxl0CjsUkiNZ6mqOpPF8a3Bb8oiFwxw2XELE6DQzqop-0OiHKuKwXtDubjmaJslCbEp-1lCo3XXTdkcMNotpG_1MVOKiz4ileTFSSKTRzOiVe1jCvT7xMBkvaL7IPKtaf_bb6d57BMKk8cGFYhl93zxADEVetuDb1n4rkV3wEAy_ziN">http://www.plantuml.com/plantuml/uml/LP4n3iCW34Ltdu8BT6ZI95A7AbDFq0iuX069uXJCaDitmKdbCi3JVyBYYp4p9Yxl0CjsUkiNZ6mqOpPF8a3Bb8oiFwxw2XELE6DQzqop-0OiHKuKwXtDubjmaJslCbEp-1lCo3XXTdkcMNotpG_1MVOKiz4ileTFSSKTRzOiVe1jCvT7xMBkvaL7IPKtaf_bb6d57BMKk8cGFYhl93zxADEVetuDb1n4rkV3wEAy_ziN</a></p>
-<h5 id="as"><a href="#as" class="headerlink" title="as"></a>as</h5><p>关键字 <code>as</code> 用于重命名参与者</p>
-<p>你还可以使用<a href="https://plantuml.com/zh/color">RGB</a>值或者颜色名修改 actor 或参与者的背景颜色。</p>
-<figure class="highlight less"><table><tr><td class="code"><pre><code class="hljs less"><span class="hljs-variable">@startuml</span><br>actor Bob #red<br>&#x27; actor 和 participant 只在外观上有区别<br>participant Alice<br>participant <span class="hljs-string">&quot;很长很长很长\n的名字&quot;</span> as L <span class="hljs-number">#99FF99</span><br>/&#x27; 也可以这样声明：<br>   participant L as <span class="hljs-string">&quot;很长很长很长\n的名字&quot;</span>  <span class="hljs-number">#99FF99</span><br>  &#x27;/<br><br>Alice-&gt;<span class="hljs-attribute">Bob</span>: 认证请求<br>Bob-&gt;<span class="hljs-attribute">Alice</span>: 认证响应<br>Bob-&gt;<span class="hljs-attribute">L</span>: 记录事务日志<br><span class="hljs-variable">@enduml</span><br></code></pre></td></tr></table></figure>
-
-<p><a href="http://www.plantuml.com/plantuml/uml/SoWkIImgAStDuKfCBialKd3AJr9GBafDuL9NW0WydTIZK01KafcSMP2OLwBmj7_LqpahdYwPzc9vqvCTNS_cT3xjsVMqOpKNiYB7dCpaL1GHfQVxEbvEtOzCnkGzdzNoT4BlqxNJbHGIYnLy59GjBTtSB2svzDKLdkoS_xH__PFTIr_id_bimVQdYpSycz7tViyiBWK55EVuW7GICXnki8A2kZuN5zXrkdP0hrefl5YtvCNwnXVhjp_RsCG55D6r0yl299vExdswQmf4mWSakE7ftgbFTdK_xLhuRFhIf_kdSpcavgM0WWy0">http://www.plantuml.com/plantuml/uml/SoWkIImgAStDuKfCBialKd3AJr9GBafDuL9NW0WydTIZK01KafcSMP2OLwBmj7_LqpahdYwPzc9vqvCTNS_cT3xjsVMqOpKNiYB7dCpaL1GHfQVxEbvEtOzCnkGzdzNoT4BlqxNJbHGIYnLy59GjBTtSB2svzDKLdkoS_xH__PFTIr_id_bimVQdYpSycz7tViyiBWK55EVuW7GICXnki8A2kZuN5zXrkdP0hrefl5YtvCNwnXVhjp_RsCG55D6r0yl299vExdswQmf4mWSakE7ftgbFTdK_xLhuRFhIf_kdSpcavgM0WWy0</a></p>
-<h5 id="order"><a href="#order" class="headerlink" title="order"></a>order</h5><p>您可以使用关键字 <code>order</code>自定义顺序来打印参与者。</p>
-<figure class="highlight less"><table><tr><td class="code"><pre><code class="hljs less"><span class="hljs-variable">@startuml</span><br>participant 最后 order <span class="hljs-number">30</span><br>participant 中间 order <span class="hljs-number">20</span><br>participant 首个 order <span class="hljs-number">10</span><br><span class="hljs-variable">@enduml</span><br></code></pre></td></tr></table></figure>
-
-<p><a href="http://www.plantuml.com/plantuml/uml/SoWkIImgAStDuIe0qfd9cGM9UIKAp-OqF9tGfv1Vb99Qf61iW2BtPCVQbzEtGEMCKELUBflsPCSgg9oX0PT3QbuAo6m0">http://www.plantuml.com/plantuml/uml/SoWkIImgAStDuIe0qfd9cGM9UIKAp-OqF9tGfv1Vb99Qf61iW2BtPCVQbzEtGEMCKELUBflsPCSgg9oX0PT3QbuAo6m0</a></p>
-<h4 id="箭头样式"><a href="#箭头样式" class="headerlink" title="箭头样式"></a>箭头样式</h4><p>修改箭头样式的方式有以下几种:</p>
-<ul>
-<li>表示一条丢失的消息：末尾加 <code>x</code></li>
-<li>让箭头只有上半部分或者下半部分：将<code>&lt;</code>和<code>&gt;</code>替换成<code>\</code>或者 <code>/</code></li>
-<li>细箭头：将箭头标记写两次 (如 <code>&gt;&gt;</code> 或 <code>//</code>)</li>
-<li>虚线箭头：用 <code>--</code> 替代 <code>-</code></li>
-<li>箭头末尾加圈：<code>-&gt;o</code></li>
-<li>双向箭头：<code>&lt;-&gt;</code></li>
-</ul>
-<figure class="highlight xl"><table><tr><td class="code"><pre><code class="hljs xl">@startuml<br>B<span class="hljs-function"><span class="hljs-title">ob</span> -&gt;</span>x Alice<br>B<span class="hljs-function"><span class="hljs-title">ob</span> -&gt;</span> Alice<br>B<span class="hljs-function"><span class="hljs-title">ob</span> -&gt;</span>&gt; Alice<br>Bob -\ Alice<br>Bob \\- Alice<br>Bob <span class="hljs-comment">//-- Alice</span><br><br>B<span class="hljs-function"><span class="hljs-title">ob</span> -&gt;</span>o Alice<br>Bob o\\-- Alice<br><br>B<span class="hljs-function"><span class="hljs-title">ob</span> &lt;-&gt;</span> Alice<br>B<span class="hljs-function"><span class="hljs-title">ob</span> &lt;-&gt;</span>o Alice<br>@enduml<br></code></pre></td></tr></table></figure>
-
-<p><a href="http://www.plantuml.com/plantuml/uml/SoWkIImgAStDuNBAJrBGjQjGSCp9J4w5yb0uABmO94vCZ2uIJrzV5yQ5Qin7aiq7AaQHja6nnGQXsY4rBmNaBW00">http://www.plantuml.com/plantuml/uml/SoWkIImgAStDuNBAJrBGjQjGSCp9J4w5yb0uABmO94vCZ2uIJrzV5yQ5Qin7aiq7AaQHja6nnGQXsY4rBmNaBW00</a></p>
-<h4 id="对消息序列编号"><a href="#对消息序列编号" class="headerlink" title="对消息序列编号"></a>对消息序列编号</h4><h5 id="autonumber"><a href="#autonumber" class="headerlink" title="autonumber"></a>autonumber</h5><p>关键字 <code>autonumber</code> 用于自动对消息编号。</p>
-<p>语句 <code>autonumber //start//</code> 用于指定编号的初始值，而 <code>autonumber //start// //increment//</code> 可以同时指定编号的初始值和每次增加的值。</p>
-<figure class="highlight less"><table><tr><td class="code"><pre><code class="hljs less"><span class="hljs-variable">@startuml</span><br>autonumber<br>Bob -&gt; <span class="hljs-attribute">Alice </span>: Authentication Request<br>Bob &lt;- <span class="hljs-attribute">Alice </span>: Authentication Response<br><br>autonumber <span class="hljs-number">15</span><br>Bob -&gt; <span class="hljs-attribute">Alice </span>: Another authentication Request<br>Bob &lt;- <span class="hljs-attribute">Alice </span>: Another authentication Response<br><br>autonumber <span class="hljs-number">40</span> <span class="hljs-number">10</span><br>Bob -&gt; <span class="hljs-attribute">Alice </span>: Yet another authentication Request<br>Bob &lt;- <span class="hljs-attribute">Alice </span>: Yet another authentication Response<br><br><span class="hljs-variable">@enduml</span><br></code></pre></td></tr></table></figure>
-
-<p><a href="http://www.plantuml.com/plantuml/uml/SoWkIImgAStDuKeiBSdFAyrDIYtYSifFKj2rKt3CoKnELR1IS2mjoKZDAybCJYp9pCzJ24ejB4qjBW6hij75hQgu83-lE9KBoM05GrCCi_FoWTgA51A9imENQYnscHWe61gWMnUPMgAGI9ALU7N0h7L8pKi1XI40">http://www.plantuml.com/plantuml/uml/SoWkIImgAStDuKeiBSdFAyrDIYtYSifFKj2rKt3CoKnELR1IS2mjoKZDAybCJYp9pCzJ24ejB4qjBW6hij75hQgu83-lE9KBoM05GrCCi_FoWTgA51A9imENQYnscHWe61gWMnUPMgAGI9ALU7N0h7L8pKi1XI40</a></p>
-<h4 id="分隔示意图"><a href="#分隔示意图" class="headerlink" title="分隔示意图"></a>分隔示意图</h4><h5 id="newpage"><a href="#newpage" class="headerlink" title="newpage"></a>newpage</h5><p>关键字 <code>newpage</code> 用于把一张图分割成多张。</p>
-<p>在 <code>newpage</code> 之后添加文字，作为新的示意图的标题。</p>
-<p>这样就能很方便地在 <em>Word</em> 中将长图分几页打印。</p>
-<figure class="highlight less"><table><tr><td class="code"><pre><code class="hljs less"><span class="hljs-variable">@startuml</span><br><br>Alice -&gt; <span class="hljs-attribute">Bob </span>: message <span class="hljs-number">1</span><br>Alice -&gt; <span class="hljs-attribute">Bob </span>: message <span class="hljs-number">2</span><br><br>newpage<br><br>Alice -&gt; <span class="hljs-attribute">Bob </span>: message <span class="hljs-number">3</span><br>Alice -&gt; <span class="hljs-attribute">Bob </span>: message <span class="hljs-number">4</span><br><br>newpage A title for the\nlast page<br><br>Alice -&gt; <span class="hljs-attribute">Bob </span>: message <span class="hljs-number">5</span><br>Alice -&gt; <span class="hljs-attribute">Bob </span>: message <span class="hljs-number">6</span><br><span class="hljs-variable">@enduml</span><br></code></pre></td></tr></table></figure>
-
-<p><a href="http://www.plantuml.com/plantuml/uml/SoWkIImgAStDuU9opCbCJbNGjLDmoazIi5B8JIqkJanFLJ349M74nPMNMbu0PEBKQunBmWIkLy5HeIIp92TL8Is_IA4a8pKcBoUnk4G1hx6ck2JCk1nIyr90lW40">http://www.plantuml.com/plantuml/uml/SoWkIImgAStDuU9opCbCJbNGjLDmoazIi5B8JIqkJanFLJ349M74nPMNMbu0PEBKQunBmWIkLy5HeIIp92TL8Is_IA4a8pKcBoUnk4G1hx6ck2JCk1nIyr90lW40</a></p>
-<h4 id="组合消息"><a href="#组合消息" class="headerlink" title="组合消息"></a>组合消息</h4><p>我们可以通过以下关键词来组合消息：</p>
-<ul>
-<li><code>alt/else</code></li>
-<li><code>opt</code></li>
-<li><code>loop</code></li>
-<li><code>par</code></li>
-<li><code>break</code></li>
-<li><code>critical</code></li>
-<li><code>group</code>, 后面紧跟着消息内容</li>
-</ul>
-<p>关键词 <code>end</code> 用来结束分组。注意，分组可以嵌套使用。</p>
-<figure class="highlight less"><table><tr><td class="code"><pre><code class="hljs less"><span class="hljs-variable">@startuml</span><br>Alice -&gt; <span class="hljs-attribute">Bob</span>: 认证请求<br><br>alt 成功情况<br><br>    Bob -&gt; <span class="hljs-attribute">Alice</span>: 认证接受<br><br>else 某种失败情况<br><br>    Bob -&gt; <span class="hljs-attribute">Alice</span>: 认证失败<br>    group 我自己的标签<br>    Alice -&gt; <span class="hljs-attribute">Log </span>: 开始记录攻击日志<br>        loop <span class="hljs-number">1000</span>次<br>            Alice -&gt; <span class="hljs-attribute">Bob</span>: DNS 攻击<br>        end<br>    Alice -&gt; <span class="hljs-attribute">Log </span>: 结束记录攻击日志<br>    end<br><br>else 另一种失败<br><br>   Bob -&gt; <span class="hljs-attribute">Alice</span>: 请重复<br><br>end<br><span class="hljs-variable">@enduml</span><br></code></pre></td></tr></table></figure>
-
-<p><a href="http://www.plantuml.com/plantuml/uml/SoWkIImgAStDuNBCoKnELT2rKt3AJx9IUB5koOlrZI_MRt-siOcBAp6dHE5PnuIdNVEVDRS-RTlAnQK014258FLWZJ0Tp_gMFksVpiMLcbESgl1i_eJdotkVBjduOijIGXeXgi3IwKNvfGL0-oQ-Q5_rTFl6vxDQdYreVxvs7rWIxaoV_7G5AuMdUngUBkz-iMx3qxrJdqtP_RHzzxFfIv_kdmvM2m8v-Va52eO61WRFrYo42w8O1FQlYr-m0aG_N55gNWes6v_ldlnixdmSDeBqGFp-j7_PanqDSE-3FOxcx_NRNxO3fNk1Ee3Q7804A1u0">http://www.plantuml.com/plantuml/uml/SoWkIImgAStDuNBCoKnELT2rKt3AJx9IUB5koOlrZI_MRt-siOcBAp6dHE5PnuIdNVEVDRS-RTlAnQK014258FLWZJ0Tp_gMFksVpiMLcbESgl1i_eJdotkVBjduOijIGXeXgi3IwKNvfGL0-oQ-Q5_rTFl6vxDQdYreVxvs7rWIxaoV_7G5AuMdUngUBkz-iMx3qxrJdqtP_RHzzxFfIv_kdmvM2m8v-Va52eO61WRFrYo42w8O1FQlYr-m0aG_N55gNWes6v_ldlnixdmSDeBqGFp-j7_PanqDSE-3FOxcx_NRNxO3fNk1Ee3Q7804A1u0</a></p>
-<h4 id="次级分组标签"><a href="#次级分组标签" class="headerlink" title="次级分组标签"></a>次级分组标签</h4><p>对于<code>group</code>而言，在标头处的<code>[</code>和<code>]</code>之间可以显示次级文本或标签。</p>
-<figure class="highlight less"><table><tr><td class="code"><pre><code class="hljs less"><span class="hljs-variable">@startuml</span><br>Alice -&gt; <span class="hljs-attribute">Bob</span>: 认证请求<br>Bob -&gt; <span class="hljs-attribute">Alice</span>: 认证失败<br>group 我自己的标签 [我自己的标签<span class="hljs-number">2</span>]<br>    Alice -&gt; <span class="hljs-attribute">Log </span>: 开始记录攻击日志<br>    loop <span class="hljs-number">1000</span>次<br>        Alice -&gt; <span class="hljs-attribute">Bob</span>: DNS攻击<br>    end<br>    Alice -&gt; <span class="hljs-attribute">Log </span>: 结束记录攻击日志<br>end<br><span class="hljs-variable">@enduml</span><br></code></pre></td></tr></table></figure>
-
-<p><a href="http://www.plantuml.com/plantuml/uml/SoWkIImgAStDuNBCoKnELT2rKt3AJx9IUB5koOlrZI_MRt-siOaBA0AI0Ak0IJrTil75bgLSwKNvfGKAppeclcXVzNJxnkUpMfujQ7--Tfz2DAQOKIoN0X30BVB9JrUmKdYwf-7fykuNwpOytJlrsPJTJzjtFvk-zEd-wM2rEVdv1Gg61WO6pzOi10kW601sgOjVC4GRM3urBmMR9SztJtusTpuMIq3g7O04A0G0">http://www.plantuml.com/plantuml/uml/SoWkIImgAStDuNBCoKnELT2rKt3AJx9IUB5koOlrZI_MRt-siOaBA0AI0Ak0IJrTil75bgLSwKNvfGKAppeclcXVzNJxnkUpMfujQ7--Tfz2DAQOKIoN0X30BVB9JrUmKdYwf-7fykuNwpOytJlrsPJTJzjtFvk-zEd-wM2rEVdv1Gg61WO6pzOi10kW601sgOjVC4GRM3urBmMR9SztJtusTpuMIq3g7O04A0G0</a></p>
-<h4 id="信息注释"><a href="#信息注释" class="headerlink" title="信息注释"></a>信息注释</h4><p>可以使用<code>note left</code> 或<code>note right</code> 关键字<em>在信息后面</em>加上注释。</p>
-<p>你可以使用<code>end note</code> 关键字有一个多行注释。</p>
-<figure class="highlight less"><table><tr><td class="code"><pre><code class="hljs less"><span class="hljs-variable">@startuml</span><br>Alice-&gt;<span class="hljs-attribute">Bob </span>: hello<br>note <span class="hljs-attribute">left</span>: this is a first note<br><br>Bob-&gt;<span class="hljs-attribute">Alice </span>: ok<br>note <span class="hljs-attribute">right</span>: this is another note<br><br>Bob-&gt;<span class="hljs-attribute">Bob </span>: I am thinking<br>note left<br>a note<br>can also be defined<br>on several lines<br>end note<br><span class="hljs-variable">@enduml</span><br></code></pre></td></tr></table></figure>
-
-<p><a href="http://www.plantuml.com/plantuml/uml/JOz13iCW30JlViL-81_88KfxwpESO0AAOoIWVN-X71h91sizevNNKZdNzwNqqBZBj3pJXXb1L1DPgW8LNsVK40lQC7pCfQAVY1eyBJ-nEUaSGev7k1ij39BlnkXuWQzEsHdj-7SH3tHd0sj9s0HEV3Hnb0n5Ff9PeIqe9EO6lRQjV_45">http://www.plantuml.com/plantuml/uml/JOz13iCW30JlViL-81_88KfxwpESO0AAOoIWVN-X71h91sizevNNKZdNzwNqqBZBj3pJXXb1L1DPgW8LNsVK40lQC7pCfQAVY1eyBJ-nEUaSGev7k1ij39BlnkXuWQzEsHdj-7SH3tHd0sj9s0HEV3Hnb0n5Ff9PeIqe9EO6lRQjV_45</a></p>
-<h4 id="分隔符"><a href="#分隔符" class="headerlink" title="分隔符"></a>分隔符</h4><p>你可以通过使用<code>==</code>关键词来将你的图表分割成多个逻辑步骤。</p>
-<figure class="highlight asciidoc"><table><tr><td class="code"><pre><code class="hljs asciidoc">@startuml<br><br><span class="hljs-section">== 初始化 ==</span><br><br>Alice -&gt; Bob: 认证请求<br>Bob --&gt; Alice: 认证响应<br><br><span class="hljs-section">== 重复 ==</span><br><br>Alice -&gt; Bob: 认证请求<br>Alice &lt;-- Bob: 认证响应<br><br>@enduml<br></code></pre></td></tr></table></figure>
-
-<p><a href="http://www.plantuml.com/plantuml/uml/SoWkIImgAStDuUAojLLusZ7twVBkfptJ56njkRWSSpAJKnLqxHISyfEi55wiM_9YVUEBzTkVRMpY0eeew09bm4fWSaydzpxTDGLiqClstgTBUWcP0f6oqTL5beEPuf2Qbm9o5m00">http://www.plantuml.com/plantuml/uml/SoWkIImgAStDuUAojLLusZ7twVBkfptJ56njkRWSSpAJKnLqxHISyfEi55wiM_9YVUEBzTkVRMpY0eeew09bm4fWSaydzpxTDGLiqClstgTBUWcP0f6oqTL5beEPuf2Qbm9o5m00</a></p>
-<h4 id="生命线的激活与撤销"><a href="#生命线的激活与撤销" class="headerlink" title="生命线的激活与撤销"></a>生命线的激活与撤销</h4><p>关键字<code>activate</code>和<code>deactivate</code>用来表示参与者的生命活动。</p>
-<p>一旦参与者被激活，它的生命线就会显示出来。</p>
-<p><code>activate</code>和<code>deactivate</code>适用于以上情形。</p>
-<p><code>destroy</code>表示一个参与者的生命线的终结。</p>
-<figure class="highlight less"><table><tr><td class="code"><pre><code class="hljs less"><span class="hljs-variable">@startuml</span><br>participant User<br><br>User -&gt; <span class="hljs-attribute">A</span>: DoWork<br>activate A<br><br>A -&gt; <span class="hljs-attribute">B</span>: &lt;&lt; createRequest &gt;&gt;<br>activate B<br><br>B -&gt; <span class="hljs-attribute">C</span>: DoWork<br>activate C<br>C --&gt; <span class="hljs-attribute">B</span>: WorkDone<br>destroy C<br><br>B --&gt; <span class="hljs-attribute">A</span>: RequestCreated<br>deactivate B<br><br>A -&gt; <span class="hljs-attribute">User</span>: Done<br>deactivate A<br><br><span class="hljs-variable">@enduml</span><br></code></pre></td></tr></table></figure>
-
-<p><a href="http://www.plantuml.com/plantuml/uml/POzH2iCW38RVSufSe1SeHQhs18EnPz4yo3RjD1tqzZDsiC9U4iZ_vykVkR8hl3qViBOUVLnTOhnMAW1ISL2eHrpoBPSxEC_nxPXG0sYHp8ZJXBvG6rxejL5bLEhdCm16VFOVOS7YS214M78Y26s_vBrfidQS_c9jln6QvGpl8IIdy3lW776c5EIr3m00">http://www.plantuml.com/plantuml/uml/POzH2iCW38RVSufSe1SeHQhs18EnPz4yo3RjD1tqzZDsiC9U4iZ_vykVkR8hl3qViBOUVLnTOhnMAW1ISL2eHrpoBPSxEC_nxPXG0sYHp8ZJXBvG6rxejL5bLEhdCm16VFOVOS7YS214M78Y26s_vBrfidQS_c9jln6QvGpl8IIdy3lW776c5EIr3m00</a></p>
-<h3 id="练手环节"><a href="#练手环节" class="headerlink" title="练手环节"></a>练手环节</h3><p>使用vscode PlantUML插件，画出Pod创建过程中，各组件之间的交互逻辑</p>
-<figure class="highlight xl"><table><tr><td class="code"><pre><code class="hljs xl">@startuml<br><br>actor <span class="hljs-string">&quot;用户&quot;</span> <span class="hljs-keyword">as</span> user<br>participant <span class="hljs-string">&quot;External Provisioner&quot;</span> <span class="hljs-keyword">as</span> provisioner<br>participant <span class="hljs-string">&quot;External Attacher&quot;</span> <span class="hljs-keyword">as</span> attacher<br>participant <span class="hljs-string">&quot;CSI插件&quot;</span> <span class="hljs-keyword">as</span> csidriver #lightgreen<br>participant <span class="hljs-string">&quot;API服务器&quot;</span> <span class="hljs-keyword">as</span> apiserver #lightblue<br>participant <span class="hljs-string">&quot;调度器&quot;</span> <span class="hljs-keyword">as</span> scheduler #lightblue<br>participant <span class="hljs-string">&quot;PV控制器&quot;</span> <span class="hljs-keyword">as</span> pvcontroller<br>participant <span class="hljs-string">&quot;AD控制器&quot;</span> <span class="hljs-keyword">as</span> adcontroller<br>participant <span class="hljs-string">&quot;kubelet&quot;</span> <span class="hljs-keyword">as</span> kubelet #lightblue<br><br>== 调度 ==<br>autonumber<br>activate user<br><span class="hljs-function"><span class="hljs-title">user</span> -&gt;</span> apiserver: 用户创建Pod(<span class="hljs-keyword">with</span> PVC)<br>activate apiserver<br>activate scheduler<br><span class="hljs-function"><span class="hljs-title">scheduler</span> -&gt;</span> apiserver: watch Pod，发起调度流程<br><br>== Provision == <br>activate pvcontroller<br><span class="hljs-function"><span class="hljs-title">pvcontroller</span> -&gt;</span> apiserver: watch PVC<br>alt 集群有符合需求的PV<br>    <span class="hljs-function"><span class="hljs-title">pvcontroller</span> -&gt;</span> apiserver: 绑定PVC&amp;PV<br><span class="hljs-keyword">else</span> 集群没有符合需求的PV<br>    <span class="hljs-function"><span class="hljs-title">pvcontroller</span> -&gt;</span> apiserver: <span class="hljs-keyword">do</span> nothing<br>end<br>activate provisioner<br><span class="hljs-function"><span class="hljs-title">provisioner</span> -&gt;</span> apiserver: watch PVC<br><span class="hljs-function"><span class="hljs-title">provisioner</span> -&gt;</span> csidriver: 调用CSI插件的Provision相关函数<br>activate csidriver<br><span class="hljs-function"><span class="hljs-title">csidriver</span> -&gt;</span> csidriver:  创建存储卷<br><span class="hljs-function"><span class="hljs-title">csidriver</span> -&gt;</span> provisioner: 创建成功<br><span class="hljs-function"><span class="hljs-title">provisioner</span> -&gt;</span> apiserver: 绑定PVC&amp;PV<br><span class="hljs-function"><span class="hljs-title">scheduler</span> -&gt;</span> apiserver: 绑定Pod与Node，调度结束(Immediate)<br><br>== Attach ==<br>activate adcontroller<br><span class="hljs-function"><span class="hljs-title">adcontroller</span> -&gt;</span> apiserver: watch Pod&amp;PV，发起attach<br><span class="hljs-function"><span class="hljs-title">adcontroller</span> -&gt;</span> apiserver: 创建VolumeAttachment资源<br><span class="hljs-function"><span class="hljs-title">attacher</span> -&gt;</span> apiserver: watch到新的VolumeAttachment资源<br><span class="hljs-function"><span class="hljs-title">attacher</span> -&gt;</span> csidriver: 调用CSI插件的Attach相关函数<br><span class="hljs-function"><span class="hljs-title">csidriver</span> -&gt;</span> csidriver: 将存储卷附着到节点<br><span class="hljs-function"><span class="hljs-title">csidriver</span> -&gt;</span> apiserver: 将VolumeAttachment标记为Attached<br><br>== Mount ==<br>activate kubelet<br><span class="hljs-function"><span class="hljs-title">kubelet</span> -&gt;</span> csidriver: VolumeManager组件调用Mount相关函数<br><span class="hljs-function"><span class="hljs-title">csidriver</span> -&gt;</span> csidriver: 将存储卷挂载到全局目录和Pod目录<br><span class="hljs-function"><span class="hljs-title">csidriver</span> -&gt;</span> kubelet: 挂载成功<br><span class="hljs-function"><span class="hljs-title">kubelet</span> -&gt;</span> kubelet: 启动容器并使用挂载后的存储卷<br><span class="hljs-function"><span class="hljs-title">kubelet</span> -&gt;</span> apiserver: 容器启动成功，Pod Running<br><span class="hljs-function"><span class="hljs-title">apiserver</span> -&gt;</span> user: 用户开心使用挂载了存储卷的业务Pod<br><br>@enduml<br></code></pre></td></tr></table></figure>
-
-<p>画出来的效果虽然有点复古..但胜在好用且方便</p>
-<p><img src="/images/pod_plantuml.png"></p>
-]]></content>
-      <categories>
-        <category>专业</category>
-        <category>工具</category>
-        <category>编辑器</category>
-        <category>PlantUML</category>
-      </categories>
-      <tags>
-        <tag>UML</tag>
-        <tag>tools</tag>
-      </tags>
-  </entry>
-  <entry>
     <title>两个goroutine交叉打印奇偶数字</title>
     <url>/2021/10/13/print-even-and-odd-numbers-in-two-goroutines/</url>
     <content><![CDATA[<p>之前面试被问到过一个比较简单的进程同步场景：如何使用两个进程（golang就是两个go routine) 交叉打印1-100这100个数字。在作为面试官的时候也问过候选人这个问题，但是没有深入总结过这个问题有多少解决方案。本文主要记录一下分析过程。</p>
 <span id="more"></span>
-
-<h2 id="解答思路"><a href="#解答思路" class="headerlink" title="解答思路"></a>解答思路</h2><p>第一反应是用两个无缓冲channel实现两个go routine之间的信息交互，互相阻塞实现同步。</p>
+<h2 id="解答思路">解答思路</h2>
+<p>第一反应是用两个无缓冲channel实现两个go routine之间的信息交互，互相阻塞实现同步。</p>
 <figure class="highlight go"><table><tr><td class="code"><pre><code class="hljs go"><span class="hljs-keyword">package</span> main<br><br><span class="hljs-keyword">import</span> (<br>	<span class="hljs-string">&quot;fmt&quot;</span><br>	<span class="hljs-string">&quot;sync&quot;</span><br>)<br><br><span class="hljs-function"><span class="hljs-keyword">func</span> <span class="hljs-title">main</span><span class="hljs-params">()</span></span> &#123;<br><br>	wg := sync.WaitGroup&#123;&#125;<br><br>	wg.Add(<span class="hljs-number">2</span>)<br><br>	channel1 := <span class="hljs-built_in">make</span>(<span class="hljs-keyword">chan</span> <span class="hljs-keyword">struct</span>&#123;&#125;)<br>	channel2 := <span class="hljs-built_in">make</span>(<span class="hljs-keyword">chan</span> <span class="hljs-keyword">struct</span>&#123;&#125;)<br><br>	<span class="hljs-keyword">go</span> <span class="hljs-function"><span class="hljs-keyword">func</span><span class="hljs-params">()</span></span> &#123;<br>		<span class="hljs-keyword">defer</span> wg.Done()<br>		<span class="hljs-keyword">for</span> i := <span class="hljs-number">0</span>; i &lt;= <span class="hljs-number">100</span>; i++ &#123;<br>			<span class="hljs-keyword">if</span> i%<span class="hljs-number">2</span> != <span class="hljs-number">0</span> &#123;<br>				<span class="hljs-keyword">continue</span><br>			&#125;<br>			&lt;-channel2<br>			fmt.Printf(<span class="hljs-string">&quot;goroutine a: %d\n&quot;</span>, i)<br>			channel1 &lt;- <span class="hljs-keyword">struct</span>&#123;&#125;&#123;&#125;<br>		&#125;<br>	&#125;()<br><br>	<span class="hljs-keyword">go</span> <span class="hljs-function"><span class="hljs-keyword">func</span><span class="hljs-params">()</span></span> &#123;<br>		<span class="hljs-keyword">defer</span> wg.Done()<br>		<span class="hljs-keyword">for</span> i := <span class="hljs-number">0</span>; i &lt;= <span class="hljs-number">100</span>; i++ &#123;<br>			<span class="hljs-keyword">if</span> i%<span class="hljs-number">2</span> == <span class="hljs-number">0</span> &#123;<br>				<span class="hljs-keyword">continue</span><br>			&#125;<br>			&lt;-channel1<br>			fmt.Printf(<span class="hljs-string">&quot;goroutine b: %d\n&quot;</span>, i)<br>			channel2 &lt;- <span class="hljs-keyword">struct</span>&#123;&#125;&#123;&#125;<br>		&#125;<br>	&#125;()<br><br>	wg.Wait()<br>&#125;<br></code></pre></td></tr></table></figure>
-
 <p>但是这种解法有明显的问题：两个go routine互相死锁。原因显而易见，两个channel互相阻塞导致。</p>
 <figure class="highlight elixir"><table><tr><td class="code"><pre><code class="hljs elixir">chao<span class="hljs-variable">@chao</span><span class="hljs-symbol">:~/code/src/demo</span><span class="hljs-variable">$ </span>go run main.go<br>fatal <span class="hljs-symbol">error:</span> all goroutines are asleep - deadlock!<br></code></pre></td></tr></table></figure>
-
 <p>那么，只用一个channel能否解决这个问题？</p>
 <figure class="highlight go"><table><tr><td class="code"><pre><code class="hljs go"><span class="hljs-function"><span class="hljs-keyword">func</span> <span class="hljs-title">main</span><span class="hljs-params">()</span></span> &#123;<br><br>	wg := sync.WaitGroup&#123;&#125;<br><br>	wg.Add(<span class="hljs-number">2</span>)<br><br>	channel := <span class="hljs-built_in">make</span>(<span class="hljs-keyword">chan</span> <span class="hljs-keyword">struct</span>&#123;&#125;)<br><br>	<span class="hljs-keyword">go</span> <span class="hljs-function"><span class="hljs-keyword">func</span><span class="hljs-params">()</span></span> &#123;<br>		<span class="hljs-keyword">defer</span> wg.Done()<br>		<span class="hljs-keyword">for</span> i := <span class="hljs-number">0</span>; i &lt;= <span class="hljs-number">100</span>; i++ &#123;<br>			<span class="hljs-keyword">if</span> i%<span class="hljs-number">2</span> != <span class="hljs-number">0</span> &#123;<br>				<span class="hljs-keyword">continue</span><br>			&#125;<br>			fmt.Printf(<span class="hljs-string">&quot;goroutine a: %d\n&quot;</span>, i)<br>			channel &lt;- <span class="hljs-keyword">struct</span>&#123;&#125;&#123;&#125;<br>		&#125;<br>	&#125;()<br><br>	<span class="hljs-keyword">go</span> <span class="hljs-function"><span class="hljs-keyword">func</span><span class="hljs-params">()</span></span> &#123;<br>		<span class="hljs-keyword">defer</span> wg.Done()<br>		<span class="hljs-keyword">for</span> i := <span class="hljs-number">0</span>; i &lt;= <span class="hljs-number">100</span>; i++ &#123;<br>			<span class="hljs-keyword">if</span> i%<span class="hljs-number">2</span> == <span class="hljs-number">0</span> &#123;<br>				<span class="hljs-keyword">continue</span><br>			&#125;<br>			&lt;-channel<br>			fmt.Printf(<span class="hljs-string">&quot;goroutine b: %d\n&quot;</span>, i)<br>		&#125;<br>	&#125;()<br><br>	wg.Wait()<br>&#125;<br></code></pre></td></tr></table></figure>
-
 <figure class="highlight vim"><table><tr><td class="code"><pre><code class="hljs vim">chao@chao:~/code/src/demo$ <span class="hljs-keyword">go</span> run main.<span class="hljs-keyword">go</span><br>goroutine <span class="hljs-variable">a:</span> <span class="hljs-number">0</span><br>goroutine <span class="hljs-variable">a:</span> <span class="hljs-number">2</span><br>goroutine <span class="hljs-variable">b:</span> <span class="hljs-number">1</span><br>goroutine <span class="hljs-variable">b:</span> <span class="hljs-number">3</span><br>goroutine <span class="hljs-variable">a:</span> <span class="hljs-number">4</span><br>goroutine <span class="hljs-variable">a:</span> <span class="hljs-number">6</span><br>goroutine <span class="hljs-variable">b:</span> <span class="hljs-number">5</span><br>goroutine <span class="hljs-variable">b:</span> <span class="hljs-number">7</span><br>goroutine <span class="hljs-variable">a:</span> <span class="hljs-number">8</span><br>goroutine <span class="hljs-variable">a:</span> <span class="hljs-number">10</span><br>goroutine <span class="hljs-variable">b:</span> <span class="hljs-number">9</span><br>goroutine <span class="hljs-variable">b:</span> <span class="hljs-number">11</span><br>...<br>goroutine <span class="hljs-variable">a:</span> <span class="hljs-number">100</span><br>fatal error: <span class="hljs-keyword">all</span> goroutines are asleep - deadlock!<br><br>goroutine <span class="hljs-number">1</span> [semacquire]:<br></code></pre></td></tr></table></figure>
-
 <p>乍一看解决方案清晰明了，但是运行结果不尽如人意：</p>
-<ol>
+<ol type="1">
 <li>每个go routine会两个两个交叉打印</li>
 <li>最终还是有死锁问题出现</li>
 </ol>
@@ -314,48 +404,50 @@
 <p>这里我们总结下几个概念：</p>
 <table>
 <thead>
-<tr>
-<th align="left">概念</th>
-<th align="left">说明</th>
+<tr class="header">
+<th style="text-align: left;">概念</th>
+<th style="text-align: left;">说明</th>
 </tr>
 </thead>
-<tbody><tr>
-<td align="left">进程</td>
-<td align="left">一个程序对应一个独立程序空间</td>
+<tbody>
+<tr class="odd">
+<td style="text-align: left;">进程</td>
+<td style="text-align: left;">一个程序对应一个独立程序空间</td>
 </tr>
-<tr>
-<td align="left">线程</td>
-<td align="left">一个执行空间，一个进程可以有多个线程</td>
+<tr class="even">
+<td style="text-align: left;">线程</td>
+<td style="text-align: left;">一个执行空间，一个进程可以有多个线程</td>
 </tr>
-<tr>
-<td align="left">逻辑处理器</td>
-<td align="left">执行创建的goroutine，绑定一个线程</td>
+<tr class="odd">
+<td style="text-align: left;">逻辑处理器</td>
+<td style="text-align: left;">执行创建的goroutine，绑定一个线程</td>
 </tr>
-<tr>
-<td align="left">调度器</td>
-<td align="left">Go运行时中的，分配goroutine给不同的逻辑处理器</td>
+<tr class="even">
+<td style="text-align: left;">调度器</td>
+<td style="text-align: left;">Go运行时中的，分配goroutine给不同的逻辑处理器</td>
 </tr>
-<tr>
-<td align="left">全局运行队列</td>
-<td align="left">所有刚创建的goroutine都会放到这里</td>
+<tr class="odd">
+<td style="text-align: left;">全局运行队列</td>
+<td style="text-align: left;">所有刚创建的goroutine都会放到这里</td>
 </tr>
-<tr>
-<td align="left">本地运行队列</td>
-<td align="left">逻辑处理器的goroutine队列</td>
+<tr class="even">
+<td style="text-align: left;">本地运行队列</td>
+<td style="text-align: left;">逻辑处理器的goroutine队列</td>
 </tr>
-</tbody></table>
+</tbody>
+</table>
 <p>当我们创建一个goroutine的后，会先存放在<code>全局运行队列</code>中，等待Go运行时的<code>调度器</code>进行调度，把他们分配给其中的一个<code>逻辑处理器</code>，并放到这个逻辑处理器对应的<code>本地运行队列</code>中，最终等着被<code>逻辑处理器</code>执行即可。</p>
 <p>这一套管理、调度、执行goroutine的方式称之为Go的并发。并发可以同时做很多事情，比如有个goroutine执行了一半，就被暂停执行其他goroutine去了，这是Go控制管理的。所以并发的概念和并行不一样，并行指的是在不同的物理处理器上同时执行不同的代码片段，<strong>并行可以同时做很多事情，而并发是同时管理很多事情</strong>，因为操作系统和硬件的总资源比较少，所以并发的效果要比并行好的多，使用较少的资源做更多的事情，也是Go语言提倡的。</p>
 <p>Go的并发原理我们刚刚讲了，那么Go的并行是怎样的呢？其实答案非常简单，多创建一个<code>逻辑处理器</code>就好了，这样调度器就可以同时分配<code>全局运行队列</code>中的goroutine到不同的<code>逻辑处理器</code>上并行执行。</p>
 <p>基于上述对goroutine调度的了解，分析为上述解法会报错：第一个执行周期，goroutine A打印“goroutine a: 0”之后，A和B都处于阻塞状态；这时A向channel中写值，A和B都解除阻塞状态；此时，期望的结果是调度器执行B，打印“goroutine b: 1”，然而调度器的行为不可知，在下一个执行周期可能会执行A，在continue之后打印“goroutine a: 2”，如下图：</p>
-<p><img src="/images/goroutine-%E9%94%99%E8%AF%AF%E6%96%B9%E6%B3%95.png"></p>
+<p><img src="/images/goroutine-错误方法.png" /></p>
 <p>正确的channel阻塞方案如下：</p>
 <figure class="highlight go"><table><tr><td class="code"><pre><code class="hljs go"><span class="hljs-function"><span class="hljs-keyword">func</span> <span class="hljs-title">main</span><span class="hljs-params">()</span></span> &#123;<br><br>	wg := sync.WaitGroup&#123;&#125;<br><br>	wg.Add(<span class="hljs-number">2</span>)<br><br>	channel := <span class="hljs-built_in">make</span>(<span class="hljs-keyword">chan</span> <span class="hljs-keyword">struct</span>&#123;&#125;)<br><br>	<span class="hljs-keyword">go</span> <span class="hljs-function"><span class="hljs-keyword">func</span><span class="hljs-params">()</span></span> &#123;<br>		<span class="hljs-keyword">defer</span> wg.Done()<br>		<span class="hljs-keyword">for</span> i := <span class="hljs-number">0</span>; i &lt;= <span class="hljs-number">100</span>; i++ &#123;<br>			channel &lt;- <span class="hljs-keyword">struct</span>&#123;&#125;&#123;&#125;<br>			<span class="hljs-keyword">if</span> i%<span class="hljs-number">2</span> != <span class="hljs-number">0</span> &#123;<br>				<span class="hljs-keyword">continue</span><br>			&#125;<br>			fmt.Printf(<span class="hljs-string">&quot;goroutine a: %d\n&quot;</span>, i)<br>		&#125;<br>	&#125;()<br><br>	<span class="hljs-keyword">go</span> <span class="hljs-function"><span class="hljs-keyword">func</span><span class="hljs-params">()</span></span> &#123;<br>		<span class="hljs-keyword">defer</span> wg.Done()<br>		<span class="hljs-keyword">for</span> i := <span class="hljs-number">0</span>; i &lt;= <span class="hljs-number">100</span>; i++ &#123;<br>			&lt;-channel<br>			<span class="hljs-keyword">if</span> i%<span class="hljs-number">2</span> == <span class="hljs-number">0</span> &#123;<br>				<span class="hljs-keyword">continue</span><br>			&#125;<br>			fmt.Printf(<span class="hljs-string">&quot;goroutine b: %d\n&quot;</span>, i)<br>		&#125;<br>	&#125;()<br><br>	wg.Wait()<br>&#125;<br><br></code></pre></td></tr></table></figure>
-
 <p>这种方案两个go routine刚进入循环的时候都会被阻塞，然后每个loop周期轮流bypass和打印，如下图：</p>
-<p><img src="/images/goroutine-%E6%AD%A3%E7%A1%AE%E6%96%B9%E6%B3%95.png"></p>
-<h2 id="参考资料"><a href="#参考资料" class="headerlink" title="参考资料"></a>参考资料</h2><p><a href="https://www.flysnow.org/2017/04/11/go-in-action-go-goroutine.html">https://www.flysnow.org/2017/04/11/go-in-action-go-goroutine.html</a></p>
-<p>Golang 调度器 GMP 原理与调度全分析：<a href="https://learnku.com/articles/41728">https://learnku.com/articles/41728</a></p>
+<p><img src="/images/goroutine-正确方法.png" /></p>
+<h2 id="参考资料">参考资料</h2>
+<p>https://www.flysnow.org/2017/04/11/go-in-action-go-goroutine.html</p>
+<p>Golang 调度器 GMP 原理与调度全分析：https://learnku.com/articles/41728</p>
 ]]></content>
       <categories>
         <category>专业</category>
@@ -368,123 +460,337 @@
       </tags>
   </entry>
   <entry>
-    <title>golang常用包系列: resource</title>
-    <url>/2021/11/04/resource-package/</url>
-    <content><![CDATA[<h1 id="简介"><a href="#简介" class="headerlink" title="简介"></a>简介</h1><p>resource库封装了golang常用的数据量，包括三种格式：指数形式、二进制幂、十进制幂。Kubernetes中使用resource.Quantity存储和运算内存、cpu和存储等数据。</p>
+    <title>Erasure Code系列之一: 原理篇</title>
+    <url>/2021/12/29/erasure-code-1st-part/</url>
+    <content><![CDATA[<p>做分布式存储的同学, 一定都知道一个了不地的冗余算法叫作纠删码(<a href="https://en.wikipedia.org/wiki/Erasure_code">Erasure-Code</a>)，或者直译为擦除码，它让存储以多副本<strong>几分之一</strong>的成本来达到同样高的可靠性.</p>
+<p>虽然web上有很多介绍EC的文字, 但几乎所有这些文字都为了严谨而搞的像牛津词典一样难读, 懂的人不需要看, 不懂的人看不懂.</p>
 <span id="more"></span>
-
-<figure class="highlight isbl"><table><tr><td class="code"><pre><code class="hljs isbl"><span class="hljs-variable">const</span> (<br>	<span class="hljs-variable">DecimalExponent</span> = <span class="hljs-function"><span class="hljs-title"><span class="hljs-built_in">Format</span></span>(<span class="hljs-string">&quot;DecimalExponent&quot;</span>) <span class="hljs-comment">// e.g., 12e6</span></span><br><span class="hljs-function">	<span class="hljs-variable">BinarySI</span>        = <span class="hljs-title"><span class="hljs-built_in">Format</span></span>(<span class="hljs-string">&quot;BinarySI&quot;</span>)        <span class="hljs-comment">// e.g., 12Mi (12 * 2^20)</span></span><br><span class="hljs-function">	<span class="hljs-variable">DecimalSI</span>       = <span class="hljs-title"><span class="hljs-built_in">Format</span></span>(<span class="hljs-string">&quot;DecimalSI&quot;</span>)       <span class="hljs-comment">// e.g., 12M  (12 * 10^6)</span></span><br><span class="hljs-function">)</span><br></code></pre></td></tr></table></figure>
-
-
-
-<h1 id="数据结构"><a href="#数据结构" class="headerlink" title="数据结构"></a>数据结构</h1><p>Quantity本质上是数字的定点表示形式，提供了String()和AsInt64()访问器，和JSON, YAML marshal/unmarshal</p>
-<figure class="highlight gauss"><table><tr><td class="code"><pre><code class="hljs gauss"><span class="hljs-built_in">type</span> Quantity <span class="hljs-keyword">struct</span> &#123;<br>	<span class="hljs-comment">// i is the quantity in int64 scaled form, if d.Dec == nil</span><br>	i int64Amount<br>	<span class="hljs-comment">// d is the quantity in inf.Dec form if d.Dec != nil</span><br>	d infDecAmount<br>	<span class="hljs-comment">// s is the generated value of this quantity to avoid recalculation</span><br>	s <span class="hljs-keyword">string</span><br>	<span class="hljs-comment">// Change Format at will. See the comment for Canonicalize for</span><br>	<span class="hljs-comment">// more details.</span><br>	<span class="hljs-keyword">Format</span><br>&#125;<br><span class="hljs-built_in">type</span> infDecAmount <span class="hljs-keyword">struct</span> &#123;<br>	*inf.Dec<br>&#125;<br><span class="hljs-comment">// Format lists the three possible formattings of a quantity.</span><br><span class="hljs-built_in">type</span> <span class="hljs-keyword">Format</span> <span class="hljs-keyword">string</span><br></code></pre></td></tr></table></figure>
-
-<p>可以直接通过quantity.Format获取该Quantity的格式，比如DecimalExponent, BinarySI或DemicalSI</p>
-<h1 id="常用方法"><a href="#常用方法" class="headerlink" title="常用方法"></a>常用方法</h1><h2 id="1-创建并初始化Quantity"><a href="#1-创建并初始化Quantity" class="headerlink" title="1 创建并初始化Quantity"></a>1 创建并初始化Quantity</h2><h3 id="1-1-从字符串解析"><a href="#1-1-从字符串解析" class="headerlink" title="1.1 从字符串解析"></a>1.1 从字符串解析</h3><figure class="highlight go"><table><tr><td class="code"><pre><code class="hljs go"><span class="hljs-function"><span class="hljs-keyword">func</span> <span class="hljs-title">MustParse</span><span class="hljs-params">(str <span class="hljs-keyword">string</span>)</span> <span class="hljs-title">Quantity</span></span><br><span class="hljs-function"><span class="hljs-keyword">func</span> <span class="hljs-title">ParseQuantity</span><span class="hljs-params">(str <span class="hljs-keyword">string</span>)</span> <span class="hljs-params">(Quantity, error)</span></span><br></code></pre></td></tr></table></figure>
-<figure class="highlight stylus"><table><tr><td class="code"><pre><code class="hljs stylus">package <span class="hljs-selector-tag">main</span><br>import (<br>	<span class="hljs-string">&quot;fmt&quot;</span><br>	<span class="hljs-string">&quot;k8s.io/apimachinery/pkg/api/resource&quot;</span><br>)<br>func <span class="hljs-selector-tag">main</span>() &#123;<br>	memorySize := resource<span class="hljs-selector-class">.MustParse</span>(<span class="hljs-string">&quot;5Gi&quot;</span>)<br>	fmt<span class="hljs-selector-class">.Printf</span>(<span class="hljs-string">&quot;memorySize = %v (%v)\n&quot;</span>, memorySize<span class="hljs-selector-class">.Value</span>(), memorySize.Format)<br>	diskSize := resource<span class="hljs-selector-class">.MustParse</span>(<span class="hljs-string">&quot;5G&quot;</span>)<br>	fmt<span class="hljs-selector-class">.Printf</span>(<span class="hljs-string">&quot;diskSize = %v (%v)\n&quot;</span>, diskSize<span class="hljs-selector-class">.Value</span>(), diskSize.Format)<br>	cores := resource<span class="hljs-selector-class">.MustParse</span>(<span class="hljs-string">&quot;5300m&quot;</span>)<br>	fmt<span class="hljs-selector-class">.Printf</span>(<span class="hljs-string">&quot;milliCores = %v (%v)\n&quot;</span>, cores<span class="hljs-selector-class">.MilliValue</span>(), cores.Format)<br>	cores2 := resource<span class="hljs-selector-class">.MustParse</span>(<span class="hljs-string">&quot;5.4&quot;</span>)<br>	fmt<span class="hljs-selector-class">.Printf</span>(<span class="hljs-string">&quot;milliCores = %v (%v)\n&quot;</span>, cores2<span class="hljs-selector-class">.MilliValue</span>(), cores2.Format)<br>&#125;<br></code></pre></td></tr></table></figure>
-
-<figure class="highlight makefile"><table><tr><td class="code"><pre><code class="hljs makefile"><span class="hljs-section">Output:</span><br>memorySize = 5368709120 (BinarySI)<br>diskSize = 5000000000 (DecimalSI)<br>milliCores = 5300 (DecimalSI)<br>milliCores = 5400 (DecimalSI)<br></code></pre></td></tr></table></figure>
-
-
-
-<h3 id="1-2-从数字创建"><a href="#1-2-从数字创建" class="headerlink" title="1.2 从数字创建"></a>1.2 从数字创建</h3><figure class="highlight reasonml"><table><tr><td class="code"><pre><code class="hljs reasonml">func <span class="hljs-constructor">NewMilliQuantity(<span class="hljs-params">value</span> <span class="hljs-params">int64</span>, <span class="hljs-params">format</span> Format)</span> *Quantity<br></code></pre></td></tr></table></figure>
-
-<figure class="highlight reasonml"><table><tr><td class="code"><pre><code class="hljs reasonml">func <span class="hljs-constructor">NewQuantity(<span class="hljs-params">value</span> <span class="hljs-params">int64</span>, <span class="hljs-params">format</span> Format)</span> *Quantity<br></code></pre></td></tr></table></figure>
-
-<figure class="highlight fortran"><table><tr><td class="code"><pre><code class="hljs fortran">func NewScaledQuantity(<span class="hljs-keyword">value</span> int64, <span class="hljs-built_in">scale</span> <span class="hljs-built_in">Scale</span>) *Quantity<br>//<span class="hljs-built_in">Scale</span>用于获取和设置以<span class="hljs-number">10</span>为基数的缩放值。为了简化，不包括以<span class="hljs-number">2</span>为底的缩放。<br><span class="hljs-keyword">type</span> <span class="hljs-built_in">Scale</span> int32<br>const (<br>	Nano  <span class="hljs-built_in">Scale</span> = -<span class="hljs-number">9</span><br>	Micro <span class="hljs-built_in">Scale</span> = -<span class="hljs-number">6</span><br>	Milli <span class="hljs-built_in">Scale</span> = -<span class="hljs-number">3</span><br>	Kilo  <span class="hljs-built_in">Scale</span> = <span class="hljs-number">3</span><br>	Mega  <span class="hljs-built_in">Scale</span> = <span class="hljs-number">6</span><br>	Giga  <span class="hljs-built_in">Scale</span> = <span class="hljs-number">9</span><br>	Tera  <span class="hljs-built_in">Scale</span> = <span class="hljs-number">12</span><br>	Peta  <span class="hljs-built_in">Scale</span> = <span class="hljs-number">15</span><br>	Exa   <span class="hljs-built_in">Scale</span> = <span class="hljs-number">18</span><br>)<br></code></pre></td></tr></table></figure>
-
-<h3 id="1-3-赋值操作"><a href="#1-3-赋值操作" class="headerlink" title="1.3 赋值操作"></a>1.3 赋值操作</h3><figure class="highlight go"><table><tr><td class="code"><pre><code class="hljs go"><span class="hljs-function"><span class="hljs-keyword">func</span> <span class="hljs-params">(q *Quantity)</span> <span class="hljs-title">Set</span><span class="hljs-params">(value <span class="hljs-keyword">int64</span>)</span></span><br></code></pre></td></tr></table></figure>
-
-<figure class="highlight go"><table><tr><td class="code"><pre><code class="hljs go"><span class="hljs-function"><span class="hljs-keyword">func</span> <span class="hljs-params">(q *Quantity)</span> <span class="hljs-title">SetMilli</span><span class="hljs-params">(value <span class="hljs-keyword">int64</span>)</span>	// <span class="hljs-title">q</span>的值为<span class="hljs-title">value</span> * 1/1000</span><br></code></pre></td></tr></table></figure>
-
-<figure class="highlight reasonml"><table><tr><td class="code"><pre><code class="hljs reasonml">func (q *Quantity) <span class="hljs-constructor">SetScaled(<span class="hljs-params">value</span> <span class="hljs-params">int64</span>, <span class="hljs-params">scale</span> Scale)</span>	<span class="hljs-comment">//value * 10^scale</span><br></code></pre></td></tr></table></figure>
-
-<h2 id="2-运算"><a href="#2-运算" class="headerlink" title="2 运算"></a>2 运算</h2><h3 id="2-1-大小比较"><a href="#2-1-大小比较" class="headerlink" title="2.1 大小比较"></a>2.1 大小比较</h3><h4 id="2-1-1-Quantity与Quantity比较"><a href="#2-1-1-Quantity与Quantity比较" class="headerlink" title="2.1.1 Quantity与Quantity比较"></a>2.1.1 Quantity与Quantity比较</h4><p>如果数量等于y，则Cmp返回0；如果数量小于y，则Cmp返回-1；如果数量大于y，则Cmp返回1</p>
-<figure class="highlight autoit"><table><tr><td class="code"><pre><code class="hljs autoit"><span class="hljs-function"><span class="hljs-keyword">func</span> <span class="hljs-params">(q *Quantity)</span> <span class="hljs-title">Cmp</span><span class="hljs-params">(y Quantity)</span> <span class="hljs-title">int</span></span><br></code></pre></td></tr></table></figure>
-
-<h4 id="2-1-2-Quantity与int64比较"><a href="#2-1-2-Quantity与int64比较" class="headerlink" title="2.1.2 Quantity与int64比较"></a>2.1.2 Quantity与int64比较</h4><figure class="highlight go"><table><tr><td class="code"><pre><code class="hljs go"><span class="hljs-function"><span class="hljs-keyword">func</span> <span class="hljs-params">(q *Quantity)</span> <span class="hljs-title">CmpInt64</span><span class="hljs-params">(y <span class="hljs-keyword">int64</span>)</span> <span class="hljs-title">int</span></span><br></code></pre></td></tr></table></figure>
-
-<h4 id="2-1-3-其他"><a href="#2-1-3-其他" class="headerlink" title="2.1.3 其他"></a>2.1.3 其他</h4><p>判断是否为零值</p>
-<figure class="highlight autoit"><table><tr><td class="code"><pre><code class="hljs autoit"><span class="hljs-function"><span class="hljs-keyword">func</span> <span class="hljs-params">(q *Quantity)</span> <span class="hljs-title">IsZero</span><span class="hljs-params">()</span> <span class="hljs-title">bool</span></span><br></code></pre></td></tr></table></figure>
-
-<p>判断是否相等</p>
-<figure class="highlight autoit"><table><tr><td class="code"><pre><code class="hljs autoit"><span class="hljs-function"><span class="hljs-keyword">func</span> <span class="hljs-params">(q Quantity)</span> <span class="hljs-title">Equal</span><span class="hljs-params">(v Quantity)</span> <span class="hljs-title">bool</span></span><br></code></pre></td></tr></table></figure>
-
-<h3 id="2-2-取整（四舍五入）操作"><a href="#2-2-取整（四舍五入）操作" class="headerlink" title="2.2 取整（四舍五入）操作"></a>2.2 取整（四舍五入）操作</h3><figure class="highlight autoit"><table><tr><td class="code"><pre><code class="hljs autoit"><span class="hljs-function"><span class="hljs-keyword">func</span> <span class="hljs-params">(q *Quantity)</span> <span class="hljs-title">RoundUp</span><span class="hljs-params">(scale Scale)</span> <span class="hljs-title">bool</span></span><br></code></pre></td></tr></table></figure>
-
-<p>根据给定的scale缩放值(scale &gt;=1)原地更新quantity，如果舍入操作导致精度丢失，则返回False。负数的RoundUp操作与证书相反，往远离0的方向：比如-9 scale 1四舍五入为-10</p>
-<h3 id="2-3-减法"><a href="#2-3-减法" class="headerlink" title="2.3 减法"></a>2.3 减法</h3><p>Sub()从当前的当前值中减去y的数量，是一个in-place操作。如果当前值为零，则数量的格式将更新为y的格式。</p>
-<figure class="highlight autoit"><table><tr><td class="code"><pre><code class="hljs autoit"><span class="hljs-function"><span class="hljs-keyword">func</span> <span class="hljs-params">(q *Quantity)</span> <span class="hljs-title">Sub</span><span class="hljs-params">(y Quantity)</span></span><br></code></pre></td></tr></table></figure>
-
-<h3 id="2-4-取反"><a href="#2-4-取反" class="headerlink" title="2.4 取反"></a>2.4 取反</h3><p>inplace操作，原地取反</p>
-<figure class="highlight autoit"><table><tr><td class="code"><pre><code class="hljs autoit"><span class="hljs-function"><span class="hljs-keyword">func</span> <span class="hljs-params">(q *Quantity)</span> <span class="hljs-title">Neg</span><span class="hljs-params">()</span></span><br></code></pre></td></tr></table></figure>
-
-<h3 id="2-5-自我类型更新"><a href="#2-5-自我类型更新" class="headerlink" title="2.5 自我类型更新"></a>2.5 自我类型更新</h3><p>inplace操作，ToDec使用inf.Dec表示形式原地更新，并返回自身。</p>
-<figure class="highlight stylus"><table><tr><td class="code"><pre><code class="hljs stylus">func (<span class="hljs-selector-tag">q</span> *Quantity) ToDec() *Quantity &#123;<br>	<span class="hljs-keyword">if</span> <span class="hljs-selector-tag">q</span><span class="hljs-selector-class">.d</span><span class="hljs-selector-class">.Dec</span> == nil &#123;<br>		<span class="hljs-selector-tag">q</span><span class="hljs-selector-class">.d</span><span class="hljs-selector-class">.Dec</span> = <span class="hljs-selector-tag">q</span><span class="hljs-selector-class">.i</span><span class="hljs-selector-class">.AsDec</span>()<br>		<span class="hljs-selector-tag">q</span><span class="hljs-selector-class">.i</span> = int64Amount&#123;&#125;<br>	&#125;<br>	return <span class="hljs-selector-tag">q</span><br>&#125;<br></code></pre></td></tr></table></figure>
-
-<p>也就是将q.i转换为inf.Dec类型之后，赋值给q.d，然后q.i设置为0</p>
-<h2 id="3-类型转换"><a href="#3-类型转换" class="headerlink" title="3. 类型转换"></a>3. 类型转换</h2><h3 id="3-1-转换为float64"><a href="#3-1-转换为float64" class="headerlink" title="3.1 转换为float64"></a>3.1 转换为float64</h3><p>可能丢失精度，如果quantity值小于float64 -Inf或者大于+Inf</p>
-<figure class="highlight autoit"><table><tr><td class="code"><pre><code class="hljs autoit"><span class="hljs-function"><span class="hljs-keyword">func</span> <span class="hljs-params">(q *Quantity)</span> <span class="hljs-title">AsApproximateFloat64</span><span class="hljs-params">()</span> <span class="hljs-title">float64</span></span><br></code></pre></td></tr></table></figure>
-
-<h3 id="3-2-转换为inf-Dec"><a href="#3-2-转换为inf-Dec" class="headerlink" title="3.2 转换为inf.Dec"></a>3.2 转换为inf.Dec</h3><p>直接返回q.d.Dec：</p>
-<figure class="highlight stylus"><table><tr><td class="code"><pre><code class="hljs stylus">func (<span class="hljs-selector-tag">q</span> *Quantity) AsDec() *inf<span class="hljs-selector-class">.Dec</span><br><span class="hljs-comment">// AsDec returns the quantity as represented by a scaled inf.Dec.</span><br>func (<span class="hljs-selector-tag">q</span> *Quantity) AsDec() *inf<span class="hljs-selector-class">.Dec</span> &#123;<br>	<span class="hljs-keyword">if</span> <span class="hljs-selector-tag">q</span><span class="hljs-selector-class">.d</span><span class="hljs-selector-class">.Dec</span> != nil &#123;<br>		return <span class="hljs-selector-tag">q</span><span class="hljs-selector-class">.d</span><span class="hljs-selector-class">.Dec</span><br>	&#125;<br>	<span class="hljs-selector-tag">q</span><span class="hljs-selector-class">.d</span><span class="hljs-selector-class">.Dec</span> = <span class="hljs-selector-tag">q</span><span class="hljs-selector-class">.i</span><span class="hljs-selector-class">.AsDec</span>()<br>	<span class="hljs-selector-tag">q</span><span class="hljs-selector-class">.i</span> = int64Amount&#123;&#125;<br>	return <span class="hljs-selector-tag">q</span><span class="hljs-selector-class">.d</span><span class="hljs-selector-class">.Dec</span><br>&#125;<br></code></pre></td></tr></table></figure>
-
-<p>由于是直接返回指针，所以对q.AsDec()进行Dec封装的方法调用时，可以原地更新q</p>
-<p>比如自定义Quantity的乘法：</p>
-<figure class="highlight stylus"><table><tr><td class="code"><pre><code class="hljs stylus"><span class="hljs-comment">// multiBy multiplies the provided quantity from the current value in place</span><br>func multiBy(x, y resource.Quantity) resource<span class="hljs-selector-class">.Quantity</span> &#123;<br>	<span class="hljs-keyword">if</span> y<span class="hljs-selector-class">.CmpInt64</span>(<span class="hljs-number">1</span>) == <span class="hljs-number">0</span> &#123;<br>		return x<br>	&#125;<br>	rst := resource<span class="hljs-selector-class">.NewQuantity</span>(x<span class="hljs-selector-class">.Value</span>(), x.Format)<br>	rst<span class="hljs-selector-class">.AsDec</span>()<span class="hljs-selector-class">.Mul</span>(x<span class="hljs-selector-class">.AsDec</span>(), y<span class="hljs-selector-class">.AsDec</span>())<br>	return *rst<br>&#125;<br></code></pre></td></tr></table></figure>
-
-<p><code>rst.AsDec().Mul()</code>借助<code>inf.Dec</code>的<code>Mul()</code>方法，实现rst的原地更新</p>
-<figure class="highlight"><table><tr><td class="code"><pre><code class="hljs"><br></code></pre></td></tr></table></figure>
-
-<p><strong>inf.Dec</strong></p>
-<p>inf包（类型inf.Dec）实现了“无限精度”十进制算法。“无限精度”描述了两个特征：十进制数表示实际上具有无限精度，并且不支持使用任何特定的固定精度进行计算。 （尽管对精度没有实际限制，但inf.Dec只能表示有限的小数。）</p>
-<figure class="highlight gauss"><table><tr><td class="code"><pre><code class="hljs gauss"><span class="hljs-built_in">type</span> Dec <span class="hljs-keyword">struct</span> &#123;<br>	unscaled big.Int<br>	<span class="hljs-built_in">scale</span>    <span class="hljs-built_in">Scale</span><br>&#125;<br><span class="hljs-comment">// Scale represents the type used for the scale of a Dec.</span><br><span class="hljs-built_in">type</span> <span class="hljs-built_in">Scale</span> int32<br></code></pre></td></tr></table></figure>
-
-<p>Dec的数学值为:</p>
-<figure class="highlight apache"><table><tr><td class="code"><pre><code class="hljs apache"><span class="hljs-attribute">unscaled</span> * <span class="hljs-number">10</span>**(-scale)<br></code></pre></td></tr></table></figure>
-
-<p>请注意，不同的Dec表示形式可能具有相等的数学值，Dec的零值表示小数位数为0的值0。</p>
-<figure class="highlight asciidoc"><table><tr><td class="code"><pre><code class="hljs asciidoc"><span class="hljs-section">unscaled  scale  String()</span><br><span class="hljs-section">-------------------------</span><br><span class="hljs-code">       0      0    &quot;0&quot;</span><br><span class="hljs-code">       0      2    &quot;0.00&quot;</span><br><span class="hljs-code">       0     -2    &quot;0&quot;</span><br><span class="hljs-code">       1      0    &quot;1&quot;</span><br><span class="hljs-code">     100      2    &quot;1.00&quot;</span><br><span class="hljs-code">      10      0   &quot;10&quot;</span><br><span class="hljs-code">       1     -1   &quot;10&quot;</span><br></code></pre></td></tr></table></figure>
-
-<h3 id="3-3-转换为String"><a href="#3-3-转换为String" class="headerlink" title="3.3 转换为String"></a>3.3 转换为String</h3><figure class="highlight autoit"><table><tr><td class="code"><pre><code class="hljs autoit"><span class="hljs-function"><span class="hljs-keyword">func</span> <span class="hljs-params">(q *Quantity)</span> <span class="hljs-title">String</span><span class="hljs-params">()</span> <span class="hljs-title">string</span></span><br></code></pre></td></tr></table></figure>
-
-<h3 id="3-4-转换为Int64"><a href="#3-4-转换为Int64" class="headerlink" title="3.4 转换为Int64"></a>3.4 转换为Int64</h3><p>如果可以进行快速转换，则AsInt64将当前值的表示形式返回为int64。如果返回false，则调用者必须使用此数量的inf.Dec形式。</p>
-<figure class="highlight go"><table><tr><td class="code"><pre><code class="hljs go"><span class="hljs-function"><span class="hljs-keyword">func</span> <span class="hljs-params">(q *Quantity)</span> <span class="hljs-title">AsInt64</span><span class="hljs-params">()</span> <span class="hljs-params">(<span class="hljs-keyword">int64</span>, <span class="hljs-keyword">bool</span>)</span></span><br></code></pre></td></tr></table></figure>
-
-<h3 id="3-5-转换为Scale"><a href="#3-5-转换为Scale" class="headerlink" title="3.5 转换为Scale"></a>3.5 转换为Scale</h3><p>AsScale返回当前值，四舍五入到提供的缩放比例，如果缩放导致精度损失，则返回false</p>
-<figure class="highlight go"><table><tr><td class="code"><pre><code class="hljs go"><span class="hljs-function"><span class="hljs-keyword">func</span> <span class="hljs-params">(q *Quantity)</span> <span class="hljs-title">AsScale</span><span class="hljs-params">(scale Scale)</span> <span class="hljs-params">(CanonicalValue, <span class="hljs-keyword">bool</span>)</span></span><br><span class="hljs-comment">// CanonicalValue允许将Quantity转换为字符串</span><br><span class="hljs-keyword">type</span> CanonicalValue <span class="hljs-keyword">interface</span> &#123;<br>	<span class="hljs-comment">// AsCanonicalBytes returns a byte array representing the string representation</span><br>	<span class="hljs-comment">// of the value mantissa and an int32 representing its exponent in base-10. Callers may</span><br>	<span class="hljs-comment">// pass a byte slice to the method to avoid allocations.</span><br>	AsCanonicalBytes(out []<span class="hljs-keyword">byte</span>) ([]<span class="hljs-keyword">byte</span>, <span class="hljs-keyword">int32</span>)<br>	<span class="hljs-comment">// AsCanonicalBase1024Bytes returns a byte array representing the string representation</span><br>	<span class="hljs-comment">// of the value mantissa and an int32 representing its exponent in base-1024. Callers</span><br>	<span class="hljs-comment">// may pass a byte slice to the method to avoid allocations.</span><br>	AsCanonicalBase1024Bytes(out []<span class="hljs-keyword">byte</span>) ([]<span class="hljs-keyword">byte</span>, <span class="hljs-keyword">int32</span>)<br>&#125;<br></code></pre></td></tr></table></figure>
-
-<h3 id="其他"><a href="#其他" class="headerlink" title="其他"></a>其他</h3><figure class="highlight go"><table><tr><td class="code"><pre><code class="hljs go"><span class="hljs-function"><span class="hljs-keyword">func</span> <span class="hljs-params">(q *Quantity)</span> <span class="hljs-title">AsCanonicalBytes</span><span class="hljs-params">(out []<span class="hljs-keyword">byte</span>)</span> <span class="hljs-params">(result []<span class="hljs-keyword">byte</span>, exponent <span class="hljs-keyword">int32</span>)</span></span><br></code></pre></td></tr></table></figure>
-
-<figure class="highlight go"><table><tr><td class="code"><pre><code class="hljs go"><span class="hljs-function"><span class="hljs-keyword">func</span> <span class="hljs-params">(q *Quantity)</span> <span class="hljs-title">CanonicalizeBytes</span><span class="hljs-params">(out []<span class="hljs-keyword">byte</span>)</span> <span class="hljs-params">(result, suffix []<span class="hljs-keyword">byte</span>)</span></span><br></code></pre></td></tr></table></figure>
-
-<figure class="highlight go"><table><tr><td class="code"><pre><code class="hljs go"><span class="hljs-comment">// ToUnstructured实现value.UnstructuredConverter接口。</span><br><span class="hljs-function"><span class="hljs-keyword">func</span> <span class="hljs-params">(q Quantity)</span> <span class="hljs-title">ToUnstructured</span><span class="hljs-params">()</span> <span class="hljs-title">interface</span></span>&#123;&#125;<br></code></pre></td></tr></table></figure>
-
-<figure class="highlight go"><table><tr><td class="code"><pre><code class="hljs go"><span class="hljs-comment">// UnmarshalJSON实现json.Unmarshaller接口。</span><br><span class="hljs-comment">// <span class="hljs-doctag">TODO:</span>删除对前导/尾随空格的支持</span><br><span class="hljs-function"><span class="hljs-keyword">func</span> <span class="hljs-params">(m *Quantity)</span> <span class="hljs-title">Unmarshal</span><span class="hljs-params">(data []<span class="hljs-keyword">byte</span>)</span> <span class="hljs-title">error</span></span><br></code></pre></td></tr></table></figure>
-
-<figure class="highlight go"><table><tr><td class="code"><pre><code class="hljs go"><span class="hljs-comment">// UnmarshalJSON实现json.Unmarshaller接口。</span><br><span class="hljs-comment">// TODO：删除对前导/尾随空格的支持</span><br><span class="hljs-function"><span class="hljs-keyword">func</span> <span class="hljs-params">(q *Quantity)</span> <span class="hljs-title">UnmarshalJSON</span><span class="hljs-params">(value []<span class="hljs-keyword">byte</span>)</span> <span class="hljs-title">error</span></span><br></code></pre></td></tr></table></figure>
-
-
-
-<h2 id="4-获取quantity内部信息"><a href="#4-获取quantity内部信息" class="headerlink" title="4. 获取quantity内部信息"></a>4. 获取quantity内部信息</h2><h3 id="取符号"><a href="#取符号" class="headerlink" title="取符号"></a>取符号</h3><figure class="highlight autoit"><table><tr><td class="code"><pre><code class="hljs autoit"><span class="hljs-function"><span class="hljs-keyword">func</span> <span class="hljs-params">(q *Quantity)</span> <span class="hljs-title">Sign</span><span class="hljs-params">()</span> <span class="hljs-title">int</span></span><br></code></pre></td></tr></table></figure>
-
-<h3 id="取值"><a href="#取值" class="headerlink" title="取值"></a>取值</h3><p>返回未缩放的q值，该值四舍五入为最接近0的整数。与AsInt64()不同，不做是否丢失精度的判断</p>
-<figure class="highlight autoit"><table><tr><td class="code"><pre><code class="hljs autoit"><span class="hljs-function"><span class="hljs-keyword">func</span> <span class="hljs-params">(q *Quantity)</span> <span class="hljs-title">Value</span><span class="hljs-params">()</span> <span class="hljs-title">int64</span></span><br></code></pre></td></tr></table></figure>
-
-<figure class="highlight autoit"><table><tr><td class="code"><pre><code class="hljs autoit"><span class="hljs-function"><span class="hljs-keyword">func</span> <span class="hljs-params">(q *Quantity)</span> <span class="hljs-title">MilliValue</span><span class="hljs-params">()</span> <span class="hljs-title">int64</span> // <span class="hljs-title">MilliValue</span>返回<span class="hljs-title">ceil</span><span class="hljs-params">(q * <span class="hljs-number">1000</span>)</span>的值；这可能会溢出<span class="hljs-title">int64</span>;请首先调用<span class="hljs-title">Value</span><span class="hljs-params">()</span>以验证数字是否足够小。</span><br></code></pre></td></tr></table></figure>
-
-<p>ref:</p>
-<p><a href="https://pkg.go.dev/k8s.io/apimachinery/pkg/api/resource">https://pkg.go.dev/k8s.io/apimachinery/pkg/api/resource</a></p>
+<h1 id="问题">问题</h1>
+<p><strong>分布式系统的第一个问题是可靠</strong></p>
+<p>解决了数据可靠性的问题之后, 数据的其他问题如<strong>一致性</strong>, <strong>性能</strong>, <strong>可用性</strong>等的讨论才有意义.</p>
+<p>然而现实残酷, 存储的硬件设备总是不够可靠. 下图摘自 <a href="https://www.backblaze.com/blog/hard-drive-reliability-stats-q1-2016/">backblaze发布的硬盘故障率统计</a></p>
+<p><img src="https://blog.openacid.com/post-res/ec-1/drive-stats-2016-q1-failure-by-mfg.jpg" /></p>
+<p>此外, 服务器还会宕机,磁盘会掉,光纤会被挖掘机铲断, 机房会被大雨淹没. 因此数据的存储必须要做到在部分硬件故障时还能保证正常读(或读写), 才可以达到工业可用的可靠性.</p>
+<p>而提高可靠性最直接最简单的方法, 就是 <strong>对一份数据存储多个副本</strong> (副本数一般选择3).</p>
+<blockquote>
+<p>结合目前经验上的磁盘的损坏率(大约是年损坏率7%), 3个副本可以达到一个工业可接受的可靠性, 这个可靠性的预期大约是11个9以上(99.999999999%的概率不丢数据).</p>
+<p>有些时候为了降低成本, 只存储2个副本, 也可以达到8个9的可靠性.</p>
+</blockquote>
+<p>3副本的方式虽然简单容易实现, 但要额外浪费2倍的存储空间, 因此存储领域中一直都希望用一种较少的冗余的存储方式, 来实现同样较高的可靠性.</p>
+<p>不论是单机上的<a href="https://zh.wikipedia.org/wiki/RAID">RAID</a>技术, 还是今天要提到的EC(<a href="https://en.wikipedia.org/wiki/Erasure_code">Erasure-Code</a>, 擦除码, 纠删码) 都是用来解决这个问题的. 接下来, 我们通过几个例子, 来逐步展示 EC 的工作原理.</p>
+<blockquote>
+<p>RAID 本质上跟EC没有区别, 它是单机系统时代被广泛使用的成熟实现. EC可以认为是分布式系统发展起来后, RAID算法在多机系统上的重新实现:</p>
+<ul>
+<li>RAID-0 相当于单副本;</li>
+<li>RAID-1 相当于2副本;</li>
+<li>RAID-5 相当于EC的k+1模式, k个数据块+1个校验块;</li>
+<li>RAID-6 相当于EC的k+2模式, k个数据块+2个校验块;</li>
+</ul>
+</blockquote>
+<h1 id="ec的基本原理">EC的基本原理</h1>
+<p>EC的目标可以简单的理解为: 对k个同样大小的数据块, 额外增加m个校验块, 以使得这k+m个数据中任意丢失m个数据块/校验块时都能把丢失的数据找回.</p>
+<h2 id="栗子1-实现k1的冗余策略">栗子1: 实现k+1的冗余策略</h2>
+<p>🌰</p>
+<p><strong>Q: 有3个自然数, 能否做到再记录第4个数字, 让任何一个数字丢失的时候都可以将其找回</strong>?</p>
+<p>这个问题很简单, 记录这3个数字的和: 假设3个数字是: <code>d₁, d₂, d₃</code> ; 再存储一个 <code>y₁ = d₁ + d₂ + d₃</code> 就可以了.</p>
+<p>于是:</p>
+<ul>
+<li><p>存储过程:</p>
+<p>就是存储这4个数字: <code>d₁, d₂, d₃, y₁</code>.</p></li>
+<li><p>恢复过程:</p>
+<ul>
+<li>如果 <code>d₁, d₂, d₃</code> 任意一个丢失, 例如 <code>d₁</code> 丢失了, 我们都可以通过 <code>d₁ = y₁ - d₂ - d₃</code> 来得到 <code>d₁</code> .</li>
+<li>如果 <code>y₁</code> 丢失, 则再次取 <code>d₁ + d₂ + d₃</code> 的和就可以将 <code>y₁</code> 找回.</li>
+</ul></li>
+</ul>
+<p>这种<strong>求和冗余</strong>策略, 就是 EC 算法的核心.</p>
+<p>在上面这个简单的系统中, 总共存储了4份数据, 有效的数据是3份. 冗余是<strong>133%</strong>, 它的可靠性和2副本的<strong>200%</strong>冗余的存储策略<strong>差不多</strong>: 最多允许丢失1份数据.</p>
+<table>
+<thead>
+<tr class="header">
+<th style="text-align: left;">策略</th>
+<th style="text-align: left;">冗余度</th>
+<th style="text-align: left;">可靠性</th>
+<th style="text-align: left;">存储策略示意</th>
+</tr>
+</thead>
+<tbody>
+<tr class="odd">
+<td style="text-align: left;">2副本</td>
+<td style="text-align: left;">200%</td>
+<td style="text-align: left;">允许丢1块: 1 X 10⁻⁸</td>
+<td style="text-align: left;">(d₁,d₁), (d₂,d₂), (d₃,d₃)</td>
+</tr>
+<tr class="even">
+<td style="text-align: left;">3+1求和冗余</td>
+<td style="text-align: left;">133%</td>
+<td style="text-align: left;">允许丢1块: 6 X 10⁻⁸</td>
+<td style="text-align: left;">(d₁, d₂, d₃, y₁)</td>
+</tr>
+</tbody>
+</table>
+<blockquote>
+<p>这里还只是<strong>差不多</strong>, 虽然都是允许丢失1块数据, 但还并不是完全一样, 后面详细讨论可靠性的计算. 在讨论可靠性的时候, 一般数据丢失风险没有量级的差异, 就可以认为是比较接近的.</p>
+</blockquote>
+<blockquote>
+<p>上面这个k+1的例子是和我们平时使用的 <a href="https://zh.wikipedia.org/wiki/RAID#RAID_5">RAID-5</a> 是类似的. <a href="https://zh.wikipedia.org/wiki/RAID#RAID_5">RAID-5</a> 通过对k个(可能是11个左右)数据块求出1份<strong>校验和</strong>的数据块. 存储这份校验块, 并允许1块(数据或校验)丢失后可以找回.</p>
+<p>但在工程上, <a href="https://zh.wikipedia.org/wiki/RAID#RAID_5">RAID-5</a> 的计算并不是自然数的求和, 而是用bit-AND操作代替加法的. 后面细聊.</p>
+</blockquote>
+<h2 id="栗子2-实现k2的冗余策略">栗子2: 实现k+2的冗余策略</h2>
+<p>🌰🌰</p>
+<p>现在我们在k+1的冗余策略基础上, 尝试增加更多的校验块, 来实现任意k+2的冗余策略.</p>
+<p><strong>Q: 有3块数据: <code>d₁, d₂, d₃</code> 可否另外再存储2个冗余的校验块(共5块), 让整个系统任意丢失2份数据时都能找回</strong>?</p>
+<p>在<strong>k+1求和</strong>的策略里, 我们给数据块和校验块建立了一个方程, 把它们关联起来了: <code>y₁ = d₁ + d₂ + d₃</code>.</p>
+<p>现在, 如果要增加可丢失的块数, 简单的把 <code>y₁</code> 存2次是<strong>不够的</strong>.</p>
+<blockquote>
+<p>例如我们存储了2个校验块:</p>
+<p><span class="math display">\[\begin{cases}
+d_1 + d_2 + d_3 = y_1 \\
+d_1 + d_2 + d_3 = y_2
+\end{cases}\]</span></p>
+<ul>
+<li><p>存储过程:</p>
+<p>存储 <code>d₁, d₂, d₃, y₁, y₂</code> 这5个数字.</p></li>
+<li><p>恢复过程:</p>
+<p>如果 <code>d₁</code>, <code>d₂</code> 都丢失了(用 <code>u₁</code>, <code>u₂</code> 表示丢失的数据), 下面这个关于 u₁, u₂ 的线性方程是有无穷多解的:</p></li>
+</ul>
+<p><span class="math display">\[\begin{cases}
+u_1 + u_2 = y_1 - d_3 \\
+u_1 + u_2 = y_2 - d_3
+\end{cases}\]</span></p>
+<p>我们没有办法从这个方程组里解出 <code>u₁</code>, <code>u₂</code> 的值, 因为第2个方程跟第1个一毛一样, 没有提供更多的信息.</p>
+</blockquote>
+<p>所以我们现在需要做的是, 对第2个校验块 <code>y₂</code>, 设计一个新的计算方法, 使之跟3个数据块之间建立一个<strong>不同</strong>的关联, <strong>使得当 <code>d₁, d₂</code> 丢失时方程组有解</strong>:</p>
+<p>我们采用的方式是, 在计算 <code>y₂</code> 时, 给每个数据 <code>dⱼ</code> 设置不同的系数:</p>
+<ul>
+<li>计算 <code>y₁</code> 时, 对每个数字乘以1, 1, 1, 1 …</li>
+<li>计算 <code>y₂</code> 时, 对每个数字乘以1, 2, 4, 8 …</li>
+</ul>
+<p><span class="math display">\[\begin{aligned}
+y_1 &amp; = d_1 +   d_2 +   d_3 \\
+y_2 &amp; = d_1 + 2 d_2 + 4 d_3
+\end{aligned}\]</span></p>
+<p>按照此方案, 我们就可以建议一个k+2的存储系统:</p>
+<ul>
+<li><p>存储过程:</p>
+<p>存储 <code>d₁, d₂, d₃, y₁, y₂</code> 这5个数字.</p></li>
+<li><p>数据恢复:</p>
+<p>如果 <code>d₁</code> 或 <code>d₂</code> 之一丢失,恢复的过程跟k+1策略一样;</p>
+<p>如果 <code>d₁, d₂</code> 丢失(同样用 <code>u₁, u₂</code> 表示), 我们可以使用剩下的3个数字 <code>d₃, y₁, y₂</code> 来建里1个关于 <code>u₁, u₂</code> 的二元一次方程组:</p></li>
+</ul>
+<p><span class="math display">\[\begin{cases}
+\begin{aligned}
+u_1 + u_2   &amp; = y_1 - d_3 \\
+u_1 + 2 u_2 &amp; = y_2 - 4 d_3
+\end{aligned}
+\end{cases}\]</span></p>
+<p>解出上面这个方程组, 就找回了丢失的 <code>u₁, u₂</code> .</p>
+<blockquote>
+<p>以上这种<strong>加系数</strong>计算校验块的方式, 就是<a href="https://zh.wikipedia.org/wiki/RAID#RAID_6">RAID-6</a>的基本工作方式:</p>
+<p><a href="https://zh.wikipedia.org/wiki/RAID#RAID_6">RAID-6</a>为k个数据块(例如k=10)之外再多存储2个校验数据, 当整个系统丢失2块数据时, 都可以找回.</p>
+</blockquote>
+<blockquote>
+<p>为什么计算 <code>y₂</code> 的系数是1, 2, 4, 8…? 系数的选择有很多种方法, 1, 2, 4, 8是其中一个. 只要保证最终丢失2个数字构成的方程组有唯一解就可以. 在k+2的场景中, 选择1, 2, 3, 4…作为系数也可以.</p>
+</blockquote>
+<p>到这里我们就得到了k+2的EC的算法: 通过166%的冗余, 实现<strong>差不多</strong>和三副本300%冗余一样的可靠性.</p>
+<h2 id="栗子3-实现km的冗余策略">栗子3: 实现k+m的冗余策略</h2>
+<p>🌰🌰🌰</p>
+<p>如果要增加更多的冗余,让EC来实现相当于4副本差不多的可靠性: k+3, 我们需要给上面的策略再增加一个校验块 <code>y₃</code> ,</p>
+<p>而 <code>y₃</code> 的计算我们需要再为所有的 <code>dⱼ</code> 选择1组不同的系数, 例如1,3,9,27…来保证后面数据丢失时,得到的1个3元一次方程组是可解的:</p>
+<p><span class="math display">\[\begin{cases}
+\begin{aligned}
+d_1 +   d_2 +   d_3 &amp; = y_1 \\
+d_1 + 2 d_2 + 4 d_3 &amp; = y_2 \\
+d_1 + 3 d_2 + 9 d_3 &amp; = y_2
+\end{aligned}
+\end{cases}\]</span></p>
+<p>这样我们通过不断的增加不同的系数, 就可以得到任意的k+m的EC冗余存储策略的实现.</p>
+<p>到此为止, 就是EC算法的核心思想了. 接下来, 我们再深入1点, 从另外1个角度来解释下为什么要选择这样1组系数.</p>
+<blockquote>
+<p>现实中使用的<a href="https://zh.wikipedia.org/wiki/RAID#RAID_5">RAID-5</a>和<a href="https://zh.wikipedia.org/wiki/RAID#RAID_6">RAID-6</a>都是 EC 算法的子集. EC 是更具通用性的算法. 但因为实现的成本(主要是恢复数据时的计算开销), <a href="https://zh.wikipedia.org/wiki/RAID#RAID_5">RAID-5</a> 和 <a href="https://zh.wikipedia.org/wiki/RAID#RAID_6">RAID-6</a>在单机的可靠性实现中还是占主流地位.</p>
+<p>但随着存储量的不断增大, 百PB的存储已经不算是很极端场景了. <a href="https://zh.wikipedia.org/wiki/RAID#RAID_6">RAID-6</a> 在单机环境下不算高的数据丢失风险在大数据量的场景中显示的越来越明显. 于是在云存储(大规模存储)领域, 能支持更多的冗余校验块的EC成为了主流.</p>
+</blockquote>
+<h1 id="ec的几何解释">EC的几何解释</h1>
+<p>上面介绍了如何选择 EC 生成校验块(编码过程)的系数, 我们隐约可以感觉到它的系数选择可能有某种内涵, 接下来我们回到最初的问题, 思索下为什么要使用这样1组系数.</p>
+<p>我们从比较简单的情况开始, 看下2个数据块计算(多个)校验块的方法:</p>
+<h2 id="m的冗余的本质-两点确定一条直线">2+m的冗余的本质: 两点确定一条直线</h2>
+<p>假设 现在我们有2个数据块 <code>d₁, d₂</code>. 要做2个校验块.</p>
+<p><strong>我们使用1个直线的方程, 把 <code>d₁, d₂</code> 作为系数, 来实现数据的冗余备份和恢复</strong>:</p>
+<p><span class="math display">\[y = d_1 + d_2 x\]</span></p>
+<p>这条直线具备这样的特点:</p>
+<ul>
+<li><strong>这条直线包含的所有数据块 <code>dⱼ</code> 的信息:</strong>
+<ul>
+<li>任何1对 <code>d₁, d₂</code> 的值就确定一条不同的直线.</li>
+<li>同样, 任意1条直线也唯一对应1对 <code>d₁, d₂</code> 的值.</li>
+</ul></li>
+</ul>
+<p>数据可靠性的问题就转化成了:</p>
+<ul>
+<li><strong>我们要保存足够多的关于这条直线的信息, 能够在需要的时候找回这条直线. 然后再提取直线方程的系数来找回最初存储的数据块</strong> <code>d₁, d₂</code>.</li>
+</ul>
+<p>要保存足够多的信息, <strong>最直观的方法就是记录这条直线上的几个点的坐标</strong>.</p>
+<blockquote>
+<p>例如假设要存储的数据<code>d₁ d₂</code> 分别是5, 6, 则直线方程是: <code>y = 5 + 6x</code>. 记录直线上<code>x=1, 2</code> 时y的值, 如下图:</p>
+<figure>
+<img src="https://blog.openacid.com/post-res/ec-1/y-5-6x-pad.png" alt="y=5+6x" /><figcaption aria-hidden="true">y=5+6x</figcaption>
+</figure>
+</blockquote>
+<p>因为2点可以确定一条直线, 只要拿到直线上2个点的坐标, 就能确定直线方程, 从而确定它的系数 <code>d₁, d₂</code> . 按照这样的思路, 我们重新用直线方程的方式描述数据冗余生成和数据恢复的过程:</p>
+<ul>
+<li><p>存储过程:</p>
+<p>以 <code>d₁, d₂</code> 作为系数建立一个直线方程, 再在直线上取2个点, 记录点的坐标(这里我们总是取x = [1, 2, 3…]的自然数的值, 所以只记录y的值就可以了): <code>d₁, d₂, (1, y₁), (2, y₂)</code>.</p></li>
+<li><p>恢复过程:</p>
+<p>已知过直线2点 <code>(1, y₁), (2, y₂)</code> 来确定直线方程, 再提取方程的系数.</p></li>
+</ul>
+<p>在这个校验块跟数据块的关系中:</p>
+<p><span class="math display">\[\begin{cases}
+y_1 = d_1 + d_2 \\
+y_2 = d_1 + 2d_2
+\end{cases}\]</span></p>
+<p>丢失1个数据块时只用 <code>y₁</code> 的方程就够了. 丢失2个数据块时才需要解二元一次方程组. 如果 <code>y₁</code> 或 <code>y₂</code> 丢失, 则通过重新取点的方式恢复.</p>
+<blockquote>
+<p>我们可以在直线上取任意多个点, 但恢复时最多也只需要2个点就够了.</p>
+</blockquote>
+<h2 id="km的冗余的本质-高次曲线">k+m的冗余的本质: 高次曲线</h2>
+<p>现在我们把它再推广到更一般的情况: 直线方程只有2个系数 <code>d₁, d₂</code> , 只能用于对2块数据做冗余, 如果要用描点方式来为更多的数据块生成冗余数据, 我们就需要有更多系数的方程, 也就是使用高次的曲线.</p>
+<blockquote>
+<p>例如: 二次曲线抛物线 y = a x² + b x + c 需要3个系数来确定(可用来存储3块数据), 同时也需要知道抛物线上的3个点的坐标来找回这条抛物线.</p>
+</blockquote>
+<p>如果有k个数据块, 我们把k个数据作为系数, 来定义1条关于x的高次曲线, 再通过记录曲线上的点的坐标来实现冗余:</p>
+<p><span class="math display">\[y = d_1 + d_2 x + d_3 x^2 + ... + d_k x^{k-1}\]</span></p>
+<blockquote>
+<p>例如要存储4个数据<code>1, 2, 3, 4</code>, 则曲线方程是: <code>y = 1 + 2x + 3x² + 4x³</code>. 记录曲线上<code>x=1, 2, 3, 4</code> 时y的值, 如下图:</p>
+<figure>
+<img src="https://blog.openacid.com/post-res/ec-1/y-1-2x-3x2-4x3-pad.png" alt="y-1-2x-3x2-4x3" /><figcaption aria-hidden="true">y-1-2x-3x2-4x3</figcaption>
+</figure>
+</blockquote>
+<ul>
+<li><p>存储过程:</p>
+<p>取m个不同的x的值(1, 2, 3…m), 记录这条曲线上m个不同点的坐标:</p>
+<p><span class="math display">\[(1, y₁), (2, y₂) ... (m, y_m)\]</span></p>
+<p>存储所有k个数据块 <code>d₁, d₂ ...</code>. 和所有m个校验块 <code>y₁, y₂ ...</code>.</p></li>
+<li><p>恢复过程:</p>
+<p>平面上m个点可以唯一确定1条 m-1 次幂的曲线(或通过m个点跟k-m个已知系数确定一条k-1次幂的曲线). 确定了这条关于x的曲线,就找回了它的系数,也就是数据块</p>
+<p><span class="math display">\[d_1, d_2 ... d_k\]</span></p></li>
+</ul>
+<p>以上就是 EC存储跟恢复的几何本质: <strong>一条k-1次曲线可以通过k个系数或曲线上的点来确定</strong>.</p>
+<h2 id="从曲线方程到生成矩阵">从曲线方程到生成矩阵</h2>
+<p>从EC的几何本质出发, 我们再系统的描述下生成校验块的过程: 为x取自然数的值(1,2,3…)来计算 y 的值:</p>
+<p><span class="math display">\[\begin{aligned}
+y_1 = d_1 + 1 d_2  + 1^2 d_3  + \dots  1^{k-1} d_k \\
+y_2 = d_1 + 2 d_2  + 2^2 d_3  + \dots  2^{k-1} d_k \\
+y_3 = d_1 + 3 d_2  + 3^2 d_3  + \dots  3^{k-1} d_k \\
+...
+\end{aligned}\]</span></p>
+<p>把上面等式写成矩阵的形式, 就得到了EC校验块的 <strong>生成矩阵</strong> <a href="https://en.wikipedia.org/wiki/Generator_matrix">Generator-Matrix</a>:</p>
+<p><span class="math display">\[\begin{bmatrix}
+y_1 \\
+y_2 \\
+y_3 \\
+... \\
+y_m
+\end{bmatrix} =
+\begin{bmatrix}
+1   &amp; 1   &amp; 1^2 &amp; ... &amp; 1^{k-1} \\
+1   &amp; 2   &amp; 2^2 &amp; ... &amp; 2^{k-1} \\
+1   &amp; 3   &amp; 3^2 &amp; ... &amp; 3^{k-1} \\
+... &amp; ... &amp; ... &amp; ... &amp; ...     \\
+1   &amp; m   &amp; m^2 &amp; ... &amp; m^{k-1}
+\end{bmatrix}
+\times
+\begin{bmatrix}
+d_1 \\
+d_2 \\
+d_3 \\
+... \\
+d_k
+\end{bmatrix}\]</span></p>
+<p>这里 <code>y₁, y₂ ...</code> 就是校验块的数据, 因此, 上面<a href="https://blog.openacid.com/storage/ec-1/#栗子3-实现km的冗余策略">栗子3</a>中选择的系数, 就是从这里来的.</p>
+<p><strong>而这个矩阵, 就是著名的 <a href="https://en.wikipedia.org/wiki/Vandermonde_matrix">Vandermonde</a> 矩阵</strong>.</p>
+<blockquote>
+<p><a href="https://en.wikipedia.org/wiki/Vandermonde_matrix">Vandermonde</a> 矩阵只是 EC 其中1种系数的选择方式. 其他常用的系数矩阵还有 <a href="https://en.wikipedia.org/wiki/Cauchy_matrix">Cauchy</a> 矩阵等.</p>
+</blockquote>
+<h1 id="ec的解码-求解n元一次方程组">EC的解码: 求解n元一次方程组</h1>
+<p>EC生成校验块的过程称之为EC的<strong>编码</strong>, 也就是用<a href="https://en.wikipedia.org/wiki/Vandermonde_matrix">Vandermonde</a>矩阵去乘所有的数据块.</p>
+<p>而当数据丢失需要找回的时候, 使用的是EC的<strong>解码</strong>过程.</p>
+<p>既然EC的编码过程是<strong>编码矩阵</strong>(<a href="https://en.wikipedia.org/wiki/Vandermonde_matrix">Vandermonde</a>)和数据块列相乘:</p>
+<p><span class="math display">\[\begin{bmatrix}
+1 &amp; 1 &amp; 1 &amp; ... &amp; 1 \\
+1 &amp; 2 &amp; 4 &amp; ... &amp; 2^{k-1} \\
+1 &amp; 3 &amp; 9 &amp; ... &amp; 3^{k-1} \\
+... \\
+1 &amp; m &amp; m^1 &amp; ... &amp; m^{k-1}
+\end{bmatrix}
+\times
+\begin{bmatrix}
+d_1 \\
+d_2 \\
+d_3 \\
+... \\
+d_k
+\end{bmatrix} =
+\begin{bmatrix}
+y_1 \\
+y_2 \\
+y_3 \\
+... \\
+y_m
+\end{bmatrix}\]</span></p>
+<p>那么解码的过程就可以描述如下:</p>
+<p>假设有q个数字丢失了, <code>q &lt;= m</code>. 从上面的<strong>编码矩阵</strong>中选择q行, 组成的一次方程组, 求解方程组算出丢失的数据.</p>
+<p>例如 <code>d₂, d₃</code> 丢失了, 下面用 <code>u₂, u₃</code> 表示 (只丢失了2块数据, 不需要所有的m个校验块参与, 只需要2个校验块来恢复数据)</p>
+<p><span class="math display">\[\begin{bmatrix}
+1 &amp; 1 &amp; 1 &amp; ... &amp; 1 \\
+1 &amp; 2 &amp; 4 &amp; ... &amp; 2^{k-1} \\
+\end{bmatrix}
+\times
+\begin{bmatrix}
+d_1 \\
+u_2 \\
+u_3 \\
+... \\
+d_k
+\end{bmatrix} =
+\begin{bmatrix}
+y_1 \\
+y_2 \\
+\end{bmatrix}\]</span></p>
+<p>这个矩阵表示的方程组里有2个未知数 <code>u₂, u₃</code> , 解方程即可得到 <code>u₂, u₃</code> 这2块丢失的数据.</p>
+<h2 id="vandermonde-矩阵保证方程组有解"><a href="https://en.wikipedia.org/wiki/Vandermonde_matrix">Vandermonde</a> 矩阵保证方程组有解</h2>
+<p>对于k+m的EC来说, 任意丢失m个数据块都可以将其找回. 因为我们选择的<a href="https://en.wikipedia.org/wiki/Vandermonde_matrix">Vandermonde</a> 矩阵保证了任意<code>m</code>行<code>m</code>列组成的子矩阵都是线性无关的, 构成的方程肯定有确定解. 例如:</p>
+<p><span class="math display">\[V=\begin{bmatrix}
+1      &amp; x_1    &amp; x_1^2  &amp; \dots  &amp; x_1^{n-1} \\
+1      &amp; x_2    &amp; x_2^2  &amp; \dots  &amp; x_2^{n-1} \\
+1      &amp; x_3    &amp; x_3^2  &amp; \dots  &amp; x_3^{n-1} \\
+\vdots &amp; \vdots &amp; \vdots &amp; \ddots &amp; \vdots    \\
+1      &amp; x_m    &amp; x_m^2  &amp; \dots  &amp; x_m^{n-1}
+\end{bmatrix}\]</span></p>
+<ul>
+<li><a href="https://en.wikipedia.org/wiki/Vandermonde_matrix">Vandermonde</a> 的 行列式的值为:</li>
+</ul>
+<p><span class="math display">\[\det(V)=\prod_{1 \leq i \lt j \leq n}(x_j - x_i)\]</span></p>
+<p>只要 xᵢ 都不同, 则 <a href="https://en.wikipedia.org/wiki/Vandermonde_matrix">Vandermonde</a> 矩阵的行列式就不为0, 矩阵可逆, 表示方程有唯一解.</p>
+<ul>
+<li><p><a href="https://en.wikipedia.org/wiki/Vandermonde_matrix">Vandermonde</a> 矩阵的任意 <code>m x m</code> 的子矩阵, 是一个Generalized Vandermonde Matrix, 它在 xᵢ 都为正数时可以保证永远有唯一解.</p>
+<p>因此在<strong>实数</strong>领域, 我们总能保证上面这个冗余策略很好的工作.</p></li>
+</ul>
+<p>好了, 到此为止我们讨论了EC在实数范围内的全部内容. 相信大家根据以上原理很容易写出一个简单但可靠的EC的实现.</p>
+<p>但这套理论还不能直接应用到线上产品中. 因为计算机中还要考虑数字大小限制, 例如k个32位整数作为数据, 通过<a href="https://en.wikipedia.org/wiki/Vandermonde_matrix">Vandermonde</a>矩阵生成校验块, 那校验块的数值几乎确定会溢出.</p>
+<h1 id="转载说明">转载说明</h1>
+<p>本文搬运自 https://blog.openacid.com/storage/ec-1/</p>
 ]]></content>
       <categories>
         <category>专业</category>
         <category>开发</category>
-        <category>golang</category>
+        <category>分布式</category>
+        <category>Erasure Code</category>
       </categories>
       <tags>
-        <tag>golang</tag>
-        <tag>resource</tag>
+        <tag>storage</tag>
+        <tag>分布式</tag>
+        <tag>Erasure Code</tag>
+        <tag>转载</tag>
       </tags>
   </entry>
   <entry>
@@ -492,18 +798,15 @@
     <url>/2021/10/12/volume-manager-source-code-analysis/</url>
     <content><![CDATA[<p>工作中需要调研k8s存储插件从in-tree模式平滑升级到CSI的可行性，因此对Kubelet中的Volume Manager模块进行源码分析，期望在全面理解代码逻辑和设计思路的前提下，避免采坑。按照一贯的思路和习惯，从接口、数据结构、函数/方法三个方面入手。</p>
 <span id="more"></span>
-
-<h1 id="接口"><a href="#接口" class="headerlink" title="接口"></a>接口</h1><ul>
+<h1 id="接口">接口</h1>
+<ul>
 <li>运行在kubelet 里让存储Ready的部件，主要是mount/unmount（attach/detach可选）</li>
 <li>pod调度到这个node上后才会有卷的相应操作，所以它的触发端是kubelet（严格讲是kubelet里的pod manager），根据Pod Manager里pod spec里申明的存储来触发卷的挂载操作</li>
 <li>Kubelet监听到调度到该节点上的pod声明，把pod缓存到Pod Manager中，VolumeManager通过Pod Manager获取PV/PVC的状态，并进行分析出具体的attach/detach、mount/umount操作然后调用plugin进行相应的业务处理</li>
 </ul>
 <figure class="highlight go"><table><tr><td class="code"><pre><code class="hljs go"><span class="hljs-comment">// VolumeManager runs a set of asynchronous loops that figure out which volumes</span><br><span class="hljs-comment">// need to be attached/mounted/unmounted/detached based on the pods scheduled on</span><br><span class="hljs-comment">// this node and makes it so.</span><br><span class="hljs-keyword">type</span> VolumeManager <span class="hljs-keyword">interface</span> &#123;<br> <br>	Run(sourcesReady config.SourcesReady, stopCh &lt;-<span class="hljs-keyword">chan</span> <span class="hljs-keyword">struct</span>&#123;&#125;)<br> <br>	WaitForAttachAndMount(pod *v1.Pod) error<br> <br>	GetMountedVolumesForPod(podName types.UniquePodName) container.VolumeMap<br> <br>	GetExtraSupplementalGroupsForPod(pod *v1.Pod) []<span class="hljs-keyword">int64</span><br> <br>	GetVolumesInUse() []v1.UniqueVolumeName<br> <br>	ReconcilerStatesHasBeenSynced() <span class="hljs-keyword">bool</span><br> <br>	VolumeIsAttached(volumeName v1.UniqueVolumeName) <span class="hljs-keyword">bool</span><br> <br>	MarkVolumesAsReportedInUse(volumesReportedAsInUse []v1.UniqueVolumeName)<br><br></code></pre></td></tr></table></figure>
-
-
-
-<h1 id="数据结构"><a href="#数据结构" class="headerlink" title="数据结构"></a>数据结构</h1><figure class="highlight go"><table><tr><td class="code"><pre><code class="hljs go"><span class="hljs-comment">// volumeManager implements the VolumeManager interface</span><br><span class="hljs-keyword">type</span> volumeManager <span class="hljs-keyword">struct</span> &#123;<br>	<br>	kubeClient clientset.Interface			<span class="hljs-comment">// dswPopulator通过kubeClient获取pvc和pv对象</span><br>	<span class="hljs-comment">// volumePluginMgr用于管理存储插件</span><br>	volumePluginMgr *volume.VolumePluginMgr	<span class="hljs-comment">// volumePluginMgr用于管理存储插件</span><br>	<br>	desiredStateOfWorld cache.DesiredStateOfWorld	<span class="hljs-comment">// 期望状态</span><br>	<br>	actualStateOfWorld cache.ActualStateOfWorld		<span class="hljs-comment">// 当前状态</span><br>	operationExecutor operationexecutor.OperationExecutor	<span class="hljs-comment">// 开始异步attach, detach, mount, unmount等操作</span><br><br>	reconciler reconciler.Reconciler	<span class="hljs-comment">// Rconciler运行异步周期性的调谐逻辑，调谐dsw和asw的状态，出发attach, detach, mount, umount等操作</span><br><br>	desiredStateOfWorldPopulator populator.DesiredStateOfWorldPopulator		<span class="hljs-comment">// 运行一个异步的周期循环，通过kubelet pod manager计算dsw</span><br>&#125;<br><br></code></pre></td></tr></table></figure>
-
+<h1 id="数据结构">数据结构</h1>
+<figure class="highlight go"><table><tr><td class="code"><pre><code class="hljs go"><span class="hljs-comment">// volumeManager implements the VolumeManager interface</span><br><span class="hljs-keyword">type</span> volumeManager <span class="hljs-keyword">struct</span> &#123;<br>	<br>	kubeClient clientset.Interface			<span class="hljs-comment">// dswPopulator通过kubeClient获取pvc和pv对象</span><br>	<span class="hljs-comment">// volumePluginMgr用于管理存储插件</span><br>	volumePluginMgr *volume.VolumePluginMgr	<span class="hljs-comment">// volumePluginMgr用于管理存储插件</span><br>	<br>	desiredStateOfWorld cache.DesiredStateOfWorld	<span class="hljs-comment">// 期望状态</span><br>	<br>	actualStateOfWorld cache.ActualStateOfWorld		<span class="hljs-comment">// 当前状态</span><br>	operationExecutor operationexecutor.OperationExecutor	<span class="hljs-comment">// 开始异步attach, detach, mount, unmount等操作</span><br><br>	reconciler reconciler.Reconciler	<span class="hljs-comment">// Rconciler运行异步周期性的调谐逻辑，调谐dsw和asw的状态，出发attach, detach, mount, umount等操作</span><br><br>	desiredStateOfWorldPopulator populator.DesiredStateOfWorldPopulator		<span class="hljs-comment">// 运行一个异步的周期循环，通过kubelet pod manager计算dsw</span><br>&#125;<br><br></code></pre></td></tr></table></figure>
 <p>volumeManager结构体实现了VolumeManager接口，主要有两个数据结构需要注意：</p>
 <ul>
 <li>desiredStateOfWorld：预期状态，表征哪些volume需要被attach，哪些pods引用这个volume。dsw由dswPopulator通过kubelet pod manager计算并更新。</li>
@@ -511,34 +814,31 @@
 </ul>
 <p><strong><code>desiredStateOfWorld</code></strong></p>
 <figure class="highlight go"><table><tr><td class="code"><pre><code class="hljs go"><span class="hljs-keyword">type</span> desiredStateOfWorld <span class="hljs-keyword">struct</span> &#123;<br>	volumesToMount <span class="hljs-keyword">map</span>[v1.UniqueVolumeName]volumeToMount<br>	volumePluginMgr *volume.VolumePluginMgr<br>	sync.RWMutex<br>&#125;<br><br><span class="hljs-comment">// The volume object represents a volume that should be attached to this node,</span><br><span class="hljs-comment">// and mounted to podsToMount.</span><br><span class="hljs-keyword">type</span> volumeToMount <span class="hljs-keyword">struct</span> &#123;<br>	<span class="hljs-comment">// volumeName contains the unique identifier for this volume.</span><br>	volumeName v1.UniqueVolumeName<br><br>	<span class="hljs-comment">// podsToMount is a map containing the set of pods that reference this</span><br>	<span class="hljs-comment">// volume and should mount it once it is attached. The key in the map is</span><br>	<span class="hljs-comment">// the name of the pod and the value is a pod object containing more</span><br>	<span class="hljs-comment">// information about the pod.</span><br>	podsToMount <span class="hljs-keyword">map</span>[types.UniquePodName]podToMount<br><br>	<span class="hljs-comment">// pluginIsAttachable indicates that the plugin for this volume implements</span><br>	<span class="hljs-comment">// the volume.Attacher interface</span><br>	pluginIsAttachable <span class="hljs-keyword">bool</span><br><br>	<span class="hljs-comment">// volumeGidValue contains the value of the GID annotation, if present.</span><br>	volumeGidValue <span class="hljs-keyword">string</span><br><br>	<span class="hljs-comment">// reportedInUse indicates that the volume was successfully added to the</span><br>	<span class="hljs-comment">// VolumesInUse field in the node&#x27;s status.</span><br>	reportedInUse <span class="hljs-keyword">bool</span><br>&#125;<br><br><span class="hljs-comment">// The pod object represents a pod that references the underlying volume and</span><br><span class="hljs-comment">// should mount it once it is attached.</span><br><span class="hljs-keyword">type</span> podToMount <span class="hljs-keyword">struct</span> &#123;<br>	<span class="hljs-comment">// podName contains the name of this pod.</span><br>	podName types.UniquePodName<br><br>	<span class="hljs-comment">// Pod to mount the volume to. Used to create NewMounter.</span><br>	pod *v1.Pod<br><br>	<span class="hljs-comment">// volume spec containing the specification for this volume. Used to</span><br>	<span class="hljs-comment">// generate the volume plugin object, and passed to plugin methods.</span><br>	<span class="hljs-comment">// For non-PVC volumes this is the same as defined in the pod object. For</span><br>	<span class="hljs-comment">// PVC volumes it is from the dereferenced PV object.</span><br>	spec *volume.Spec<br><br>	<span class="hljs-comment">// outerVolumeSpecName is the volume.Spec.Name() of the volume as referenced</span><br>	<span class="hljs-comment">// directly in the pod. If the volume was referenced through a persistent</span><br>	<span class="hljs-comment">// volume claim, this contains the volume.Spec.Name() of the persistent</span><br>	<span class="hljs-comment">// volume claim</span><br>	outerVolumeSpecName <span class="hljs-keyword">string</span><br>&#125;<br><br></code></pre></td></tr></table></figure>
-
 <p><strong><code>actualStateOfWorld</code></strong></p>
 <figure class="highlight go"><table><tr><td class="code"><pre><code class="hljs go"><span class="hljs-keyword">type</span> actualStateOfWorld <span class="hljs-keyword">struct</span> &#123;<br>	nodeName types.NodeName<br>	attachedVolumes <span class="hljs-keyword">map</span>[v1.UniqueVolumeName]attachedVolume<br>	volumePluginMgr *volume.VolumePluginMgr<br>	sync.RWMutex<br>&#125;<br></code></pre></td></tr></table></figure>
-
-
-
-<h1 id="功能实现"><a href="#功能实现" class="headerlink" title="功能实现"></a>功能实现</h1><h2 id="volumeManager初始化"><a href="#volumeManager初始化" class="headerlink" title="volumeManager初始化"></a>volumeManager初始化</h2><p>volumeManger结构体初始化</p>
+<h1 id="功能实现">功能实现</h1>
+<h2 id="volumemanager初始化">volumeManager初始化</h2>
+<p>volumeManger结构体初始化</p>
 <figure class="highlight go"><table><tr><td class="code"><pre><code class="hljs go"><span class="hljs-comment">// setup volumeManager</span><br>	klet.volumeManager = volumemanager.NewVolumeManager(<br>		kubeCfg.EnableControllerAttachDetach,<br>		nodeName,<br>		klet.podManager,<br>		klet.statusManager,<br>		klet.kubeClient,<br>		klet.volumePluginMgr,<br>		klet.containerRuntime,<br>		kubeDeps.Mounter,<br>		klet.getPodsDir(),<br>		kubeDeps.Recorder,<br>		experimentalCheckNodeCapabilitiesBeforeMount,<br>		keepTerminatedPodVolumes)<br></code></pre></td></tr></table></figure>
-
-
-
-<h2 id="启动volumeManger-Run"><a href="#启动volumeManger-Run" class="headerlink" title="启动volumeManger.Run()"></a>启动volumeManger.Run()</h2><ul>
+<h2 id="启动volumemanger.run">启动volumeManger.Run()</h2>
+<ul>
 <li>goroutine启动dswPopulator.Run()：从apiserver同步pod信息，更新dsw</li>
 <li>goroutine启动reconcile.Run()：调谐预期状态和当前状态，将当前状态手链到预期状态</li>
 </ul>
-<h3 id="desiredStateOfWorldPopulator-Run"><a href="#desiredStateOfWorldPopulator-Run" class="headerlink" title="desiredStateOfWorldPopulator.Run()"></a>desiredStateOfWorldPopulator.Run()</h3><p>dswp.Run()启动一个loop定时调用dswp.populatorLoop()，用于更新dsw</p>
+<h3 id="desiredstateofworldpopulator.run">desiredStateOfWorldPopulator.Run()</h3>
+<p>dswp.Run()启动一个loop定时调用dswp.populatorLoop()，用于更新dsw</p>
 <figure class="highlight stylus"><table><tr><td class="code"><pre><code class="hljs stylus"><br>func (dswp *desiredStateOfWorldPopulator) Run(sourcesReady config<span class="hljs-selector-class">.SourcesReady</span>, stopCh &lt;-chan struct&#123;&#125;) &#123;<br>	<span class="hljs-comment">// Wait for the completion of a loop that started after sources are all ready, then set hasAddedPods accordingly</span><br>	glog<span class="hljs-selector-class">.Infof</span>(<span class="hljs-string">&quot;Desired state populator starts to run&quot;</span>)<br>	wait<span class="hljs-selector-class">.PollUntil</span>(dswp<span class="hljs-selector-class">.loopSleepDuration</span>, func() (bool, error) &#123;<br>		done := sourcesReady<span class="hljs-selector-class">.AllReady</span>()<br>		dswp<span class="hljs-selector-class">.populatorLoop</span>()<br>		return done, nil<br>	&#125;, stopCh)<br>	dswp<span class="hljs-selector-class">.hasAddedPodsLock</span><span class="hljs-selector-class">.Lock</span>()<br>	dswp<span class="hljs-selector-class">.hasAddedPods</span> = true<br>	dswp<span class="hljs-selector-class">.hasAddedPodsLock</span><span class="hljs-selector-class">.Unlock</span>()<br>	wait<span class="hljs-selector-class">.Until</span>(dswp<span class="hljs-selector-class">.populatorLoop</span>, dswp<span class="hljs-selector-class">.loopSleepDuration</span>, stopCh)<br>&#125;<br></code></pre></td></tr></table></figure>
-
-<h4 id="dswp-populatorLoop"><a href="#dswp-populatorLoop" class="headerlink" title="dswp.populatorLoop()"></a>dswp.populatorLoop()</h4><p>dswp.populatorLoop()先调用dswp.findAndAddNewPods()，获取所有pods并更新到dsw</p>
+<h4 id="dswp.populatorloop">dswp.populatorLoop()</h4>
+<p>dswp.populatorLoop()先调用dswp.findAndAddNewPods()，获取所有pods并更新到dsw</p>
 <figure class="highlight go"><table><tr><td class="code"><pre><code class="hljs go"><span class="hljs-function"><span class="hljs-keyword">func</span> <span class="hljs-params">(dswp *desiredStateOfWorldPopulator)</span> <span class="hljs-title">populatorLoop</span><span class="hljs-params">()</span></span> &#123;<br>	dswp.findAndAddNewPods()<br> <br>	<span class="hljs-comment">// findAndRemoveDeletedPods() calls out to the container runtime to</span><br>	<span class="hljs-comment">// determine if the containers for a given pod are terminated. This is</span><br>	<span class="hljs-comment">// an expensive operation, therefore we limit the rate that</span><br>	<span class="hljs-comment">// findAndRemoveDeletedPods() is called independently of the main</span><br>	<span class="hljs-comment">// populator loop.</span><br>	<span class="hljs-keyword">if</span> time.Since(dswp.timeOfLastGetPodStatus) &lt; dswp.getPodStatusRetryDuration &#123;<br>		glog.V(<span class="hljs-number">5</span>).Infof(<br>			<span class="hljs-string">&quot;Skipping findAndRemoveDeletedPods(). Not permitted until %v (getPodStatusRetryDuration %v).&quot;</span>,<br>			dswp.timeOfLastGetPodStatus.Add(dswp.getPodStatusRetryDuration),<br>			dswp.getPodStatusRetryDuration)<br> <br>		<span class="hljs-keyword">return</span><br>	&#125;<br> <br>	dswp.findAndRemoveDeletedPods()<br>&#125;<br></code></pre></td></tr></table></figure>
-
-<h5 id="dsw-findAndAddNewPods"><a href="#dsw-findAndAddNewPods" class="headerlink" title="dsw.findAndAddNewPods()"></a>dsw.findAndAddNewPods()</h5><ul>
-<li>  调用podManager获取所有的pods</li>
-<li>  调用processPodVolumes去更新desiredStateOfWorld</li>
+<h5 id="dsw.findandaddnewpods">dsw.findAndAddNewPods()</h5>
+<ul>
+<li>调用podManager获取所有的pods</li>
+<li>调用processPodVolumes去更新desiredStateOfWorld</li>
 </ul>
 <figure class="highlight go"><table><tr><td class="code"><pre><code class="hljs go"><span class="hljs-comment">// Iterate through all pods and add to desired state of world if they don&#x27;t</span><br><span class="hljs-comment">// exist but should</span><br><span class="hljs-function"><span class="hljs-keyword">func</span> <span class="hljs-params">(dswp *desiredStateOfWorldPopulator)</span> <span class="hljs-title">findAndAddNewPods</span><span class="hljs-params">()</span></span> &#123;<br>	<span class="hljs-comment">// Map unique pod name to outer volume name to MountedVolume.</span><br>	mountedVolumesForPod := <span class="hljs-built_in">make</span>(<span class="hljs-keyword">map</span>[volumetypes.UniquePodName]<span class="hljs-keyword">map</span>[<span class="hljs-keyword">string</span>]cache.MountedVolume)<br>	<span class="hljs-keyword">if</span> utilfeature.DefaultFeatureGate.Enabled(features.ExpandInUsePersistentVolumes) &#123;<br>		<span class="hljs-keyword">for</span> _, mountedVolume := <span class="hljs-keyword">range</span> dswp.actualStateOfWorld.GetMountedVolumes() &#123;<br>			mountedVolumes, exist := mountedVolumesForPod[mountedVolume.PodName]<br>			<span class="hljs-keyword">if</span> !exist &#123;<br>				mountedVolumes = <span class="hljs-built_in">make</span>(<span class="hljs-keyword">map</span>[<span class="hljs-keyword">string</span>]cache.MountedVolume)<br>				mountedVolumesForPod[mountedVolume.PodName] = mountedVolumes<br>			&#125;<br>			mountedVolumes[mountedVolume.OuterVolumeSpecName] = mountedVolume<br>		&#125;<br>	&#125;<br> <br>	processedVolumesForFSResize := sets.NewString()<br>	<span class="hljs-keyword">for</span> _, pod := <span class="hljs-keyword">range</span> dswp.podManager.GetPods() &#123;<br>		<span class="hljs-keyword">if</span> dswp.isPodTerminated(pod) &#123;<br>			<span class="hljs-comment">// Do not (re)add volumes for terminated pods</span><br>			<span class="hljs-keyword">continue</span><br>		&#125;<br>		dswp.processPodVolumes(pod, mountedVolumesForPod, processedVolumesForFSResize)<br>	&#125;<br>&#125;<br></code></pre></td></tr></table></figure>
-
-<h6 id="dswp-processPodVolumes"><a href="#dswp-processPodVolumes" class="headerlink" title="dswp.processPodVolumes()"></a>dswp.processPodVolumes()</h6><ul>
+<h6 id="dswp.processpodvolumes">dswp.processPodVolumes()</h6>
+<ul>
 <li><p>如果volume已经在processedPod map中，无需处理:</p>
 <figure class="highlight go"><table><tr><td class="code"><pre><code class="hljs go">uniquePodName := util.GetUniquePodName(pod)<br>	<span class="hljs-keyword">if</span> dswp.podPreviouslyProcessed(uniquePodName) &#123;<br>		<span class="hljs-keyword">return</span><br>&#125;<br></code></pre></td></tr></table></figure></li>
 <li><p>对pod 下所有容器下的volumeDevice和volumeMounts加入processedPods map中:</p>
@@ -553,37 +853,33 @@
 <figure class="highlight go"><table><tr><td class="code"><pre><code class="hljs go"><span class="hljs-keyword">if</span> _, volumeExists := dsw.volumesToMount[volumeName]; !volumeExists &#123;<br>		dsw.volumesToMount[volumeName] = volumeToMount&#123;<br>			volumeName:              volumeName,<br>			podsToMount:             <span class="hljs-built_in">make</span>(<span class="hljs-keyword">map</span>[types.UniquePodName]podToMount),<br>			pluginIsAttachable:      attachable,<br>			pluginIsDeviceMountable: deviceMountable,<br>			volumeGidValue:          volumeGidValue,<br>			reportedInUse:           <span class="hljs-literal">false</span>,<br>		&#125;<br>	&#125;<br> <br>	<span class="hljs-comment">// Create new podToMount object. If it already exists, it is refreshed with</span><br>	<span class="hljs-comment">// updated values (this is required for volumes that require remounting on</span><br>	<span class="hljs-comment">// pod update, like Downward API volumes).</span><br>	dsw.volumesToMount[volumeName].podsToMount[podName] = podToMount&#123;<br>		podName:             podName,<br>		pod:                 pod,<br>		volumeSpec:          volumeSpec,<br>		outerVolumeSpecName: outerVolumeSpecName,<br>	&#125;<br></code></pre></td></tr></table></figure></li>
 <li><p>对pod name标记为已处理，aws标记重新挂载</p>
 <figure class="highlight go"><table><tr><td class="code"><pre><code class="hljs go"><span class="hljs-comment">// some of the volume additions may have failed, should not mark this pod as fully processed</span><br>	<span class="hljs-keyword">if</span> allVolumesAdded &#123;<br>		dswp.markPodProcessed(uniquePodName)<br>		<span class="hljs-comment">// New pod has been synced. Re-mount all volumes that need it</span><br>		<span class="hljs-comment">// (e.g. DownwardAPI)</span><br>		dswp.actualStateOfWorld.MarkRemountRequired(uniquePodName)<br>	&#125;<br></code></pre></td></tr></table></figure></li>
+</ul></li>
 </ul>
-</li>
-</ul>
-<h2 id="reconcile-Run"><a href="#reconcile-Run" class="headerlink" title="reconcile.Run()"></a>reconcile.Run()</h2><p><code>reconcile()</code>的实现逻辑如下：</p>
+<h2 id="reconcile.run">reconcile.Run()</h2>
+<p><code>reconcile()</code>的实现逻辑如下：</p>
 <ul>
 <li><p>对于实际已经挂载的与预期不一样的需要unmount：UnmountVolume函数中处理，volume分为filesystem与block，在dsw不包括asw的情况需要unmount</p>
 <figure class="highlight go"><table><tr><td class="code"><pre><code class="hljs Go"><span class="hljs-comment">// Ensure volumes that should be unmounted are unmounted.</span><br>	<span class="hljs-keyword">for</span> _, mountedVolume := <span class="hljs-keyword">range</span> rc.actualStateOfWorld.GetMountedVolumes() &#123;<br>		<span class="hljs-keyword">if</span> !rc.desiredStateOfWorld.PodExistsInVolume(mountedVolume.PodName, mountedVolume.VolumeName) &#123;<br>			<span class="hljs-comment">// Volume is mounted, unmount it</span><br>			glog.V(<span class="hljs-number">5</span>).Infof(mountedVolume.GenerateMsgDetailed(<span class="hljs-string">&quot;Starting operationExecutor.UnmountVolume&quot;</span>, <span class="hljs-string">&quot;&quot;</span>))<br>			err := rc.operationExecutor.UnmountVolume(<br>				mountedVolume.MountedVolume, rc.actualStateOfWorld, rc.kubeletPodsDir)<br>			<span class="hljs-keyword">if</span> err != <span class="hljs-literal">nil</span> &amp;&amp;<br>				!nestedpendingoperations.IsAlreadyExists(err) &amp;&amp;<br>				!exponentialbackoff.IsExponentialBackoff(err) &#123;<br>				<span class="hljs-comment">// Ignore nestedpendingoperations.IsAlreadyExists and exponentialbackoff.IsExponentialBackoff errors, they are expected.</span><br>				<span class="hljs-comment">// Log all other errors.</span><br>				glog.Errorf(mountedVolume.GenerateErrorDetailed(fmt.Sprintf(<span class="hljs-string">&quot;operationExecutor.UnmountVolume failed (controllerAttachDetachEnabled %v)&quot;</span>, rc.controllerAttachDetachEnabled), err).Error())<br>			&#125;<br>			<span class="hljs-keyword">if</span> err == <span class="hljs-literal">nil</span> &#123;<br>				glog.Infof(mountedVolume.GenerateMsgDetailed(<span class="hljs-string">&quot;operationExecutor.UnmountVolume started&quot;</span>, <span class="hljs-string">&quot;&quot;</span>))<br>			&#125;<br>		&#125;<br>	&#125;<br></code></pre></td></tr></table></figure></li>
 <li><p>从dsw数据结构中获取需要mount的volumes</p>
 <figure class="highlight go"><table><tr><td class="code"><pre><code class="hljs go"><span class="hljs-comment">// Ensure volumes that should be attached/mounted are attached/mounted.</span><br><span class="hljs-keyword">for</span> _, volumeToMount := <span class="hljs-keyword">range</span> rc.desiredStateOfWorld.GetVolumesToMount() &#123;<br>	volMounted, devicePath, err := rc.actualStateOfWorld.PodExistsInVolume(volumeToMount.PodName, volumeToMount.VolumeName)<br>	volumeToMount.DevicePath = devicePath<br></code></pre></td></tr></table></figure></li>
-<li><p>如果volume没有attach (err为volumeNotAttachedError)，查看actualStateOfWorld结构体中attachedVolumes没有volumeName，在则调用AttachVolume函数</p>
-</li>
-<li><p>如果volume没有mount或者error为remountRequiredError， 调用MountVolume函数</p>
-</li>
-<li><p>如果err为fsResizeRequiredError，调用ExpandVolumeFSWithoutUnmounting函数</p>
-</li>
+<li><p>如果volume没有attach (err为volumeNotAttachedError)，查看actualStateOfWorld结构体中attachedVolumes没有volumeName，在则调用AttachVolume函数</p></li>
+<li><p>如果volume没有mount或者error为remountRequiredError， 调用MountVolume函数</p></li>
+<li><p>如果err为fsResizeRequiredError，调用ExpandVolumeFSWithoutUnmounting函数</p></li>
 </ul>
-<h2 id="operationExecutor初始化"><a href="#operationExecutor初始化" class="headerlink" title="operationExecutor初始化"></a>operationExecutor初始化</h2><p>NewVolumeManager函數中初始化operationExecutor的函數爲NewOperationExecutor。operationExecuter根据不同的volume plugin生成mountvolume, attachvolume函数，供reconcile调用。</p>
+<h2 id="operationexecutor初始化">operationExecutor初始化</h2>
+<p>NewVolumeManager函數中初始化operationExecutor的函數爲NewOperationExecutor。operationExecuter根据不同的volume plugin生成mountvolume, attachvolume函数，供reconcile调用。</p>
 <figure class="highlight go"><table><tr><td class="code"><pre><code class="hljs go"><br>		operationExecutor: operationexecutor.NewOperationExecutor(operationexecutor.NewOperationGenerator(<br>			kubeClient,<br>			volumePluginMgr,<br>			recorder,<br>			checkNodeCapabilitiesBeforeMount,<br>			volumepathhandler.NewBlockVolumePathHandler())),<br> <br> <br><span class="hljs-comment">// NewOperationExecutor returns a new instance of OperationExecutor.</span><br><span class="hljs-function"><span class="hljs-keyword">func</span> <span class="hljs-title">NewOperationExecutor</span><span class="hljs-params">(</span></span><br><span class="hljs-params"><span class="hljs-function">	operationGenerator OperationGenerator)</span> <span class="hljs-title">OperationExecutor</span></span> &#123;<br> <br>	<span class="hljs-keyword">return</span> &amp;operationExecutor&#123;<br>		pendingOperations: nestedpendingoperations.NewNestedPendingOperations(<br>			<span class="hljs-literal">true</span> <span class="hljs-comment">/* exponentialBackOffOnError */</span>),<br>		operationGenerator: operationGenerator,<br>	&#125;<br>&#125;<br></code></pre></td></tr></table></figure>
-
-<h2 id="SyncPod"><a href="#SyncPod" class="headerlink" title="SyncPod()"></a>SyncPod()</h2><p>  同步 pod 时，等待 pod attach 和 mount 完成</p>
+<h2 id="syncpod">SyncPod()</h2>
+<p>同步 pod 时，等待 pod attach 和 mount 完成</p>
 <figure class="highlight go"><table><tr><td class="code"><pre><code class="hljs Go"><span class="hljs-comment">// Volume manager will not mount volumes for terminated pods</span><br><span class="hljs-keyword">if</span> !kl.podIsTerminated(pod) &#123;<br>	<span class="hljs-comment">// Wait for volumes to attach/mount</span><br>	<span class="hljs-keyword">if</span> err := kl.volumeManager.WaitForAttachAndMount(pod); err != <span class="hljs-literal">nil</span> &#123;<br>		kl.recorder.Eventf(pod, v1.EventTypeWarning, events.FailedMountVolume, <span class="hljs-string">&quot;Unable to mount volumes for pod %q: %v&quot;</span>, format.Pod(pod), err)<br>		klog.Errorf(<span class="hljs-string">&quot;Unable to mount volumes for pod %q: %v; skipping pod&quot;</span>, format.Pod(pod), err)<br>		<span class="hljs-keyword">return</span> err<br>	&#125;<br>&#125;<br></code></pre></td></tr></table></figure>
-
-<h3 id="WaitForAttachAndMount"><a href="#WaitForAttachAndMount" class="headerlink" title="WaitForAttachAndMount()"></a>WaitForAttachAndMount()</h3><p> 获取 pod 所有的 volume </p>
+<h3 id="waitforattachandmount">WaitForAttachAndMount()</h3>
+<p>获取 pod 所有的 volume</p>
 <figure class="highlight go"><table><tr><td class="code"><pre><code class="hljs go"><span class="hljs-function"><span class="hljs-keyword">func</span> <span class="hljs-params">(vm *volumeManager)</span> <span class="hljs-title">WaitForAttachAndMount</span><span class="hljs-params">(pod *v1.Pod)</span> <span class="hljs-title">error</span></span> &#123;<br>	<span class="hljs-keyword">if</span> pod == <span class="hljs-literal">nil</span> &#123;<br>		<span class="hljs-keyword">return</span> <span class="hljs-literal">nil</span><br>	&#125;<br> <br>	expectedVolumes := getExpectedVolumes(pod)<br>	<span class="hljs-keyword">if</span> <span class="hljs-built_in">len</span>(expectedVolumes) == <span class="hljs-number">0</span> &#123;<br>		<span class="hljs-comment">// No volumes to verify</span><br>		<span class="hljs-keyword">return</span> <span class="hljs-literal">nil</span><br>	&#125;<br></code></pre></td></tr></table></figure>
-
-<h3 id="verifyVolumesMountedFunc"><a href="#verifyVolumesMountedFunc" class="headerlink" title="verifyVolumesMountedFunc()"></a>verifyVolumesMountedFunc()</h3><p>   没有被 mount 的volume 数量为0，表示成功完成挂载</p>
+<h3 id="verifyvolumesmountedfunc">verifyVolumesMountedFunc()</h3>
+<p>没有被 mount 的volume 数量为0，表示成功完成挂载</p>
 <figure class="highlight go"><table><tr><td class="code"><pre><code class="hljs Go"><span class="hljs-comment">// verifyVolumesMountedFunc returns a method that returns true when all expected</span><br><span class="hljs-comment">// volumes are mounted.</span><br><span class="hljs-function"><span class="hljs-keyword">func</span> <span class="hljs-params">(vm *volumeManager)</span> <span class="hljs-title">verifyVolumesMountedFunc</span><span class="hljs-params">(podName types.UniquePodName, expectedVolumes []<span class="hljs-keyword">string</span>)</span> <span class="hljs-title">wait</span>.<span class="hljs-title">ConditionFunc</span></span> &#123;<br>	<span class="hljs-keyword">return</span> <span class="hljs-function"><span class="hljs-keyword">func</span><span class="hljs-params">()</span> <span class="hljs-params">(done <span class="hljs-keyword">bool</span>, err error)</span></span> &#123;<br>		<span class="hljs-keyword">return</span> <span class="hljs-built_in">len</span>(vm.getUnmountedVolumes(podName, expectedVolumes)) == <span class="hljs-number">0</span>, <span class="hljs-literal">nil</span><br>	&#125;<br>&#125;<br></code></pre></td></tr></table></figure>
-
-
-
-<h1 id="参考"><a href="#参考" class="headerlink" title="参考"></a>参考</h1><p><a href="https://blog.csdn.net/zhonglinzhang/article/details/82800287">https://blog.csdn.net/zhonglinzhang/article/details/82800287</a></p>
+<h1 id="参考">参考</h1>
+<p>https://blog.csdn.net/zhonglinzhang/article/details/82800287</p>
 ]]></content>
       <categories>
         <category>专业</category>
