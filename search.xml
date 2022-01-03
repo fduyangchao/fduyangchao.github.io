@@ -272,13 +272,47 @@
       </tags>
   </entry>
   <entry>
-    <title>Linux I/O 基本原理</title>
-    <url>/2022/01/03/linix-io-stack/</url>
-    <content><![CDATA[<span id="more"></span>
-<h1 id="参考文档">参考文档</h1>
+    <title>Linux I/O 存储栈</title>
+    <url>/2022/01/03/linux-storage-stack/</url>
+    <content><![CDATA[<p>开发者在开发基于Linux平台的程序时，经常做文件的读写操作。大家平时用的各种语言，比如C/C++, Java, Go等，都对这些操作都做了高层次的封装，把很多细节都屏蔽了。为了深入了解应用程序对磁盘上的文件进行读写时，从上到下经历了哪些事情，需要剖开 Linux 的内部来看 Linux 的 IO 栈。</p>
+<span id="more"></span>
+<h1 id="linux-io全景图">1 Linux I/O全景图</h1>
+<p>下图是Linux提供的第4版 I/O 栈全景图：</p>
+<p><img src="https://cdn.jsdelivr.net/gh/simonyangchao/resources@image/Linux-storage-stack-diagram_v4.10.png" style="zoom:50%;" /></p>
+<p><img src="https://cdn.jsdelivr.net/gh/simonyangchao/resources@image/linux-io-stack-ilinux.jpg" style="zoom:50%;" /></p>
+<h1 id="大话存储栈">2 大话存储栈</h1>
+<p>废话不多说，下图是一个 Linux IO 栈的简化版本（官方的 IO 栈参考这个<strong><a href="http://www.ilinuxkernel.com/files/Linux.IO.stack_v1.0.pdf">Linux.IO.stack_v1.0.pdf</a></strong>）</p>
+<p><img src="https://cdn.jsdelivr.net/gh/simonyangchao/resources@image/linux-io-stack-2.jpeg" style="zoom:75%;" /></p>
+<p>通过 IO 栈可以看到，在应用层简单的一次读操作 ，就需要从用户空间到内核空间，再到硬件设备的复杂配合才能完成。其中内核层实现了最核心逻辑，包括 IO 引擎、VFS、PageCache、通用块管理层、IO 调度层等许多个组件。</p>
+<h2 id="库函数io引擎">2.1 库函数（IO引擎）</h2>
+<p>// TODO</p>
+<h2 id="系统调用">2.2 系统调用</h2>
+<p>// TODO</p>
+<h2 id="虚拟文件系统vfs">2.3 虚拟文件系统（VFS）</h2>
+<p>// TODO</p>
+<h2 id="page-cache">2.4 Page Cache</h2>
+<p>// TODO</p>
+<h2 id="文件系统">2.5 文件系统</h2>
+<p>// TODO</p>
+<h2 id="通用块管理层-generic-block-layer">2.6 通用块管理层 (Generic Block Layer)</h2>
+<p>// TODO</p>
+<h2 id="io调度">2.7 I/O调度</h2>
+<p>// TODO</p>
+<h2 id="设备驱动">2.8 设备驱动</h2>
+<p>// TODO</p>
+<h2 id="存储设备">2.9 存储设备</h2>
+<p>// TODO</p>
+<h1 id="场景分析">3 场景分析</h1>
+<h2 id="读操作">3.1 读操作</h2>
+<p>// TODO</p>
+<h2 id="写操作">3.2 写操作</h2>
+<p>// TODO</p>
+<h1 id="参考文档">4 参考文档</h1>
 <ol type="1">
 <li>https://zhuanlan.zhihu.com/p/436292700</li>
 <li>https://zhuanlan.zhihu.com/p/371574406</li>
+<li>https://zhuanlan.zhihu.com/p/441679741</li>
+<li>http://www.ilinuxkernel.com/files/Linux.IO.stack_v1.0.pdf</li>
 </ol>
 ]]></content>
       <categories>
