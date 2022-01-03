@@ -1,0 +1,567 @@
+
+
+<!DOCTYPE html>
+<html lang="zh-CN" data-default-color-scheme=auto>
+
+
+
+<head>
+  <meta charset="UTF-8">
+  <link rel="apple-touch-icon" sizes="76x76" href="/img/favicon.png">
+  <link rel="icon" href="/img/favicon.png">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=5.0, shrink-to-fit=no">
+  <meta http-equiv="x-ua-compatible" content="ie=edge">
+  
+  <meta name="theme-color" content="#2f4154">
+  <meta name="description" content="在大数据上云的背景下，云上存储，或者说云原生存储，成为了公有云和私有云都无法绕过的话题。针对者三种存储后端，网络上有不少描述的文章，但大多是泛泛阐述使用场景、性能和罗列概念。本文将以比较“人话”的方式，讨论三者之间的本质区别。">
+  <meta name="author" content="Chao">
+  <meta name="keywords" content="">
+  <meta name="description" content="在大数据上云的背景下，云上存储，或者说云原生存储，成为了公有云和私有云都无法绕过的话题。针对者三种存储后端，网络上有不少描述的文章，但大多是泛泛阐述使用场景、性能和罗列概念。本文将以比较“人话”的方式，讨论三者之间的本质区别。">
+<meta property="og:type" content="article">
+<meta property="og:title" content="云原生存储漫谈系列之一：块存储 vs. 文件存储 vs. 对象存储">
+<meta property="og:url" content="https://fduyangcaho.github.io/2022/01/01/block-storage-and-filesystem-storage-and-object-storage/index.html">
+<meta property="og:site_name" content="Chao&#39;s Blog">
+<meta property="og:description" content="在大数据上云的背景下，云上存储，或者说云原生存储，成为了公有云和私有云都无法绕过的话题。针对者三种存储后端，网络上有不少描述的文章，但大多是泛泛阐述使用场景、性能和罗列概念。本文将以比较“人话”的方式，讨论三者之间的本质区别。">
+<meta property="og:locale" content="zh_CN">
+<meta property="article:published_time" content="2022-01-01T15:57:59.000Z">
+<meta property="article:modified_time" content="2022-01-03T10:53:55.310Z">
+<meta property="article:author" content="Chao">
+<meta property="article:tag" content="storage">
+<meta property="article:tag" content="分布式">
+<meta name="twitter:card" content="summary_large_image">
+  
+  <title>云原生存储漫谈系列之一：块存储 vs. 文件存储 vs. 对象存储 - Chao&#39;s Blog</title>
+
+  <link  rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap@4/dist/css/bootstrap.min.css" />
+
+
+  <link  rel="stylesheet" href="https://cdn.jsdelivr.net/npm/github-markdown-css@4/github-markdown.min.css" />
+  <link  rel="stylesheet" href="/lib/hint/hint.min.css" />
+
+  
+    
+    
+      
+      <link  rel="stylesheet" href="https://cdn.jsdelivr.net/npm/highlight.js@10/styles/github-gist.min.css" />
+    
+  
+
+  
+    <link  rel="stylesheet" href="https://cdn.jsdelivr.net/npm/@fancyapps/fancybox@3/dist/jquery.fancybox.min.css" />
+  
+
+
+<!-- 主题依赖的图标库，不要自行修改 -->
+
+<link rel="stylesheet" href="//at.alicdn.com/t/font_1749284_ba1fz6golrf.css">
+
+
+
+<link rel="stylesheet" href="//at.alicdn.com/t/font_1736178_kmeydafke9r.css">
+
+
+<link  rel="stylesheet" href="/css/main.css" />
+
+<!-- 自定义样式保持在最底部 -->
+
+
+  <script id="fluid-configs">
+    var Fluid = window.Fluid || {};
+    var CONFIG = {"hostname":"fduyangcaho.github.io","root":"/","version":"1.8.12","typing":{"enable":true,"typeSpeed":70,"cursorChar":"_","loop":false},"anchorjs":{"enable":true,"element":"h1,h2,h3,h4,h5,h6","placement":"right","visible":"hover","icon":""},"progressbar":{"enable":true,"height_px":3,"color":"#29d","options":{"showSpinner":false,"trickleSpeed":100}},"copy_btn":true,"image_zoom":{"enable":true,"img_url_replace":["",""]},"toc":{"enable":true,"headingSelector":"h1,h2,h3,h4,h5,h6","collapseDepth":0},"lazyload":{"enable":true,"loading_img":"/img/loading.gif","onlypost":false,"offset_factor":2},"web_analytics":{"enable":false,"baidu":null,"google":null,"gtag":null,"tencent":{"sid":null,"cid":null},"woyaola":null,"cnzz":null,"leancloud":{"app_id":null,"app_key":null,"server_url":null,"path":"window.location.pathname"}},"search_path":"/local-search.xml"};
+  </script>
+  <script  src="/js/utils.js" ></script>
+  <script  src="/js/color-schema.js" ></script>
+<meta name="generator" content="Hexo 5.4.0"><link rel="alternate" href="/atom.xml" title="Chao's Blog" type="application/atom+xml">
+</head>
+
+
+<body>
+  <header style="height: 70vh;">
+    <nav id="navbar" class="navbar fixed-top  navbar-expand-lg navbar-dark scrolling-navbar">
+  <div class="container">
+    <a class="navbar-brand" href="/">
+      <strong>Simon&#39;s Blog</strong>
+    </a>
+
+    <button id="navbar-toggler-btn" class="navbar-toggler" type="button" data-toggle="collapse"
+            data-target="#navbarSupportedContent"
+            aria-controls="navbarSupportedContent" aria-expanded="false" aria-label="Toggle navigation">
+      <div class="animated-icon"><span></span><span></span><span></span></div>
+    </button>
+
+    <!-- Collapsible content -->
+    <div class="collapse navbar-collapse" id="navbarSupportedContent">
+      <ul class="navbar-nav ml-auto text-center">
+        
+          
+          
+          
+          
+            <li class="nav-item">
+              <a class="nav-link" href="/">
+                <i class="iconfont icon-home-fill"></i>
+                首页
+              </a>
+            </li>
+          
+        
+          
+          
+          
+          
+            <li class="nav-item">
+              <a class="nav-link" href="/archives/">
+                <i class="iconfont icon-archive-fill"></i>
+                归档
+              </a>
+            </li>
+          
+        
+          
+          
+          
+          
+            <li class="nav-item">
+              <a class="nav-link" href="/categories/">
+                <i class="iconfont icon-category-fill"></i>
+                分类
+              </a>
+            </li>
+          
+        
+          
+          
+          
+          
+            <li class="nav-item">
+              <a class="nav-link" href="/tags/">
+                <i class="iconfont icon-tags-fill"></i>
+                标签
+              </a>
+            </li>
+          
+        
+          
+          
+          
+          
+            <li class="nav-item">
+              <a class="nav-link" href="/about/">
+                <i class="iconfont icon-user-fill"></i>
+                关于
+              </a>
+            </li>
+          
+        
+        
+          <li class="nav-item" id="search-btn">
+            <a class="nav-link" target="_self" href="javascript:;" data-toggle="modal" data-target="#modalSearch" aria-label="Search">
+              &nbsp;<i class="iconfont icon-search"></i>&nbsp;
+            </a>
+          </li>
+        
+        
+          <li class="nav-item" id="color-toggle-btn">
+            <a class="nav-link" target="_self" href="javascript:;" aria-label="Color Toggle">&nbsp;<i
+                class="iconfont icon-dark" id="color-toggle-icon"></i>&nbsp;</a>
+          </li>
+        
+      </ul>
+    </div>
+  </div>
+</nav>
+
+    <div class="banner" id="banner" parallax=true
+         style="background: url('https://cdn.jsdelivr.net/gh/simonyangchao/resources@image/Cloud-Computing-in-Construction-Trends.jpeg') no-repeat center center;
+           background-size: cover;">
+      <div class="full-bg-img">
+        <div class="mask flex-center" style="background-color: rgba(0, 0, 0, 0.3)">
+          <div class="page-header text-center fade-in-up">
+            <span class="h2" id="subtitle" title="云原生存储漫谈系列之一：块存储 vs. 文件存储 vs. 对象存储">
+              
+            </span>
+
+            
+              <div class="mt-3">
+  
+  
+    <span class="post-meta">
+      <i class="iconfont icon-date-fill" aria-hidden="true"></i>
+      <time datetime="2022-01-01 23:57" pubdate>
+        2022年1月1日 晚上
+      </time>
+    </span>
+  
+</div>
+
+<div class="mt-1">
+  
+    <span class="post-meta mr-2">
+      <i class="iconfont icon-chart"></i>
+      3.6k 字
+    </span>
+  
+
+  
+    <span class="post-meta mr-2">
+      <i class="iconfont icon-clock-fill"></i>
+      
+      
+      11 分钟
+    </span>
+  
+
+  
+  
+</div>
+
+            
+          </div>
+
+          
+        </div>
+      </div>
+    </div>
+  </header>
+
+  <main>
+    
+      
+
+<div class="container-fluid nopadding-x">
+  <div class="row nomargin-x">
+    <div class="d-none d-lg-block col-lg-2"></div>
+    <div class="col-lg-8 nopadding-x-md">
+      <div class="container nopadding-x-md" id="board-ctn">
+        <div class="py-5" id="board">
+          <article class="post-content mx-auto">
+            <!-- SEO header -->
+            <h1 style="display: none">云原生存储漫谈系列之一：块存储 vs. 文件存储 vs. 对象存储</h1>
+            
+              <p class="note note-info">
+                
+                  本文最后更新于：2022年1月3日 晚上
+                
+              </p>
+            
+            <div class="markdown-body">
+              <p>在大数据上云的背景下，云上存储，或者说云原生存储，成为了公有云和私有云都无法绕过的话题。针对者三种存储后端，网络上有不少描述的文章，但大多是泛泛阐述使用场景、性能和罗列概念。本文将以比较“人话”的方式，讨论三者之间的本质区别。</p>
+<span id="more"></span>
+<h1 id="背景">背景</h1>
+<p>首先厘清讨论背景：本文是在分布式存储的大框架下，讨论三种存储产品的区别。在非分布式场景下，它们对应的产品形态为：</p>
+<table>
+<thead>
+<tr class="header">
+<th>分布式场景</th>
+<th>非分布式场景</th>
+</tr>
+</thead>
+<tbody>
+<tr class="odd">
+<td>块存储</td>
+<td>块设备。包括磁盘，或者LVM管理的逻辑卷设备</td>
+</tr>
+<tr class="even">
+<td>文件存储</td>
+<td>文件系统。包括传统文件系统xfs, ext4，以及自定义的用户态文件系统fuse</td>
+</tr>
+<tr class="odd">
+<td>对象存储</td>
+<td>键值数据库。把对象Object作为值Value存储，就是单机版对象存储</td>
+</tr>
+</tbody>
+</table>
+<p>由此看来，分布式存储系统就是在传统的单机接口上重新包装了一层分布式事务处理逻辑实现的。</p>
+<h1 id="正文">正文</h1>
+<p>先看一个知乎上最高赞的答案，这个回答是我比较认同的，通俗易懂并且逻辑清晰。</p>
+<blockquote>
+<p>看了一圈回答，似乎没有回答说到“本质差别”。</p>
+<p><strong>这三者的本质差别是使用数据的“用户”不同：块存储的用户是可以读写块设备的软件系统，例如传统的文件系统、数据库；文件存储的用户是自然人；对象存储的用户则是其它计算机软件。</strong></p>
+<p>首先要说明一下的是，这三个概念都是分布式存储中的概念，由不同的网络存储协议实现。不过“网络”和“存储”的结合本身会对解释这三个概念的本质差异带来不便，下面的解释中我会先解释存储本身，之后再结合网络来说明。</p>
+<p><strong>块存储</strong></p>
+<p>传统的文件系统，是直接访问存储数据的硬件介质的。介质不关心也无法去关心这些数据的组织方式以及结构，因此用的是最简单粗暴的组织方式：所有数据按照固定的大小分块，每一块赋予一个用于寻址的编号。以大家比较熟悉的机械硬盘为例，一块就是一个扇区，老式硬盘是512字节大小，新硬盘是4K字节大小。老式硬盘用柱面-磁头-扇区号（CHS，Cylinder-Head-Sector）组成的编号进行寻址，现代硬盘用一个逻辑块编号寻址（LBA，Logical Block Addressing）。所以，硬盘往往又叫<strong>块设备（Block Device）</strong>,当然，除了硬盘还有其它块设备，例如不同规格的软盘，各种规格的光盘，磁带等。</p>
+<p>至于哪些块组成一个文件，哪些块记录的是目录/子目录信息，这是文件系统的事情。不同的文件系统有不同的组织结构，这个就不展开了。为了方便管理，硬盘这样的块设备通常可以划分为多个逻辑块设备，也就是我们熟悉的硬盘分区（Partition）。反过来，单个介质的容量、性能有限，可以通过某些技术手段把多个物理块设备组合成一个逻辑块设备，例如各种级别的RAID，JBOD，某些操作系统的卷管理系统（Volume Manager）如Windows的动态磁盘、Linux的LVM等。</p>
+<p>补充一下的是，块设备的使用对象除了传统的文件系统以及一些专用的管理工具软件如备份软件、分区软件外，还有一些支持直接读写块设备的软件如数据库等，但一般用户很少这样使用。</p>
+<p>在网络存储中，服务器把本地的一个逻辑块设备——底层可能是一个物理块设备的一部分，也可能是多个物理块设备的组合，又或者多个物理块设备的组合中的一部分，甚至是一个本地文件系统上的一个文件——通过某种协议模拟成一个块设备，远程的客户端（可以是一台物理主机，也可以是虚拟机，某个回答所说的块设备是给虚拟机用是错误的）使用相同的协议把这个逻辑块设备作为一个本地存储介质来使用，划分分区，格式化自己的文件系统等等。这就是块存储，比较常见的块存储协议是iSCSI。</p>
+<p><strong>文件存储</strong></p>
+<p>文件存储的用户是自然人，最容易理解。计算机中所有的数据都是0和1，存储在硬件介质上的一连串的01组合对我们来说完全无法去分辨以及管理。因此我们用“文件”这个概念对这些数据进行组织，所有用于同一用途的数据，按照不同应用程序要求的结构方式组成不同类型的文件（通常用不同的后缀来指代不同的类型），然后我们给每一个文件起一个方便理解记忆的名字。而当文件很多的时候，我们按照某种划分方式给这些文件分组，每一组文件放在同一个目录（或者叫文件夹）里面，当然我们也需要给这些目录起一个容易理解和记忆的名字。而且目录下面除了文件还可以有下一级目录（称之为子目录或者子文件夹），所有的文件、目录形成一个树状结构。我们最常用的Windows系统中，打开资源管理器就可以看到以这种方式组织起来的无数个文件和目录。在Linux可以用tree命令列出以某个文件夹为根节点列出一棵树：</p>
+<p>为了方便查找，从根节点开始逐级目录往下，一直到文件本身，把这些目录、子目录、文件的名字用特殊的字符（例如Windows/DOS用“”，类Unix系统用“/”）拼接起来，这样的一串字符称之为路径，例如Linux中的“/etc/systemd/system.conf”或者Windows中的“C:.exe”。人类用路径作为唯一标识来访问具体的文件。而由作为自然人的程序员所编写的各种软件程序，绝大部分也使用这种方式来访问文件。</p>
+<p>把存储介质上的数据组织成目录-子目录-文件这种形式的数据结构，用于从这个结构中寻找、添加、修改、删除文件的程序，以及用于维护这个结构的程序，组成的系统有一个专用的名字：<strong>文件系统（File System）。</strong>文件系统有很多，常见的有Windows的FAT/FAT32/NTFS，Linux的EXT2/EXT3/EXT4/XFS/BtrFS等。而在网络存储中，底层数据并非存储在本地的存储介质，而是另外一台服务器上，不同的客户端都可以用类似文件系统的方式访问这台服务器上的文件，这样的系统叫网络文件系统，常见的网络文件系统有Windows网络的CIFS（也叫SMB）、类Unix系统网络的NFS等。而文件存储除了网络文件系统外，FTP、HTTP其实也算是文件存储的某种特殊实现，都是可以通过某个url来访问一个文件。</p>
+<p><strong>对象存储</strong></p>
+<p>对象存储其实介于块存储和文件存储之间。文件存储的树状结构以及路径访问方式虽然方便人类理解、记忆和访问，但计算机需要把路径进行分解，然后逐级向下查找，最后才能查找到需要的文件，对于应用程序来说既没必要，也很浪费性能。</p>
+<p>而块存储是排它的，服务器上的某个逻辑块被一台客户端挂载后，其它客户端就无法访问上面的数据了。而且挂载了块存储的客户端上的一个程序要访问里面的数据，不算类似数据库直接访问裸设备这种方式外，通常也需要对其进行分区、安装文件系统后才能使用。除了在网络上传输的数据包效率更高以外，并不比使用文件存储好多少，客户端的文件系统依然需要对路径分解，然后逐级查找才能定位到某一个具体的文件。</p>
+<p>是否可以用不排它但又类似块设备访问的方式呢？理论上是可以的，但对块设备的访问方式虽然比文件存储快，其实也很麻烦——一个文件往往是由多个块组成，并且很可能是不连续的。例如要读取一个文件，可能需要发出这样的指令：</p>
+<ul>
+<li>读取从编号A₁开始的N₁个块；</li>
+<li>读取从编号A₂开始的N₂个块；</li>
+<li>读取从编号A₃开始的N₃个块；</li>
+<li>…………</li>
+<li>读取从编号Ai开始的Ni个块。</li>
+</ul>
+<p>最后自行把这i个连续的块自行拼接成一个文件，这才完成了一个文件的读取操作。为了发出这些指令，访问文件的软件系统需要记录下这个文件分成多少个部分，每个部分的起始块编号是多少，有多少块，顺序如何。不单是读取操作，删除、写入、修改操作也是如此，非常麻烦复杂。而且往往一个文件可能需要被多个系统访问使用，这就更麻烦了。</p>
+<p>为了解决这中麻烦，使用一个统一的底层存储系统，管理这些文件和底层介质的组织结构，然后给每个文件一个唯一的标识，其它系统需要访问某个文件，直接提供文件的标识就可以了。存储系统可以用更高效的数据组织方式来管理这些标识以及其对应的存储介质上的块。</p>
+<p>当然，对于不同的软件系统来说，一次访问需要获取的不一定是单个我们传统意义上的文件，根据不同的需要可能只是一个/组值，某个文件的一部分，也可能是多个文件的组合，甚至是某个块设备，统称为对象。这就是对象存储。</p>
+<p><strong>分布式存储</strong></p>
+<p>所谓分布式存储，就是这个底层的存储系统，因为要存放的数据非常多，单一服务器所能连接的物理介质是有限的，提供的IO性能也是有限的，所以通过多台服务器协同工作，每台服务器连接若干物理介质，一起为多个系统提供存储服务。为了满足不同的访问需求，往往一个分布式存储系统，可以同时提供文件存储、块存储和对象存储这三种形式的服务。</p>
+</blockquote>
+<p>“用户不同”，道出了三种存储的本质区别，这是一种非常易懂，让没有存储背景的人都能理解的阐述方式。翻译成比较专业的描述，就是<strong>场景</strong>不同，<strong>接口</strong>不同，<strong>协议</strong>不同，<strong>架构</strong>不同</p>
+<table>
+<thead>
+<tr class="header">
+<th></th>
+<th>块存储</th>
+<th>文件存储</th>
+<th>对象存储</th>
+</tr>
+</thead>
+<tbody>
+<tr class="odd">
+<td>用户</td>
+<td>可以读写块设备的软件系统，比如数据库、文件系统等</td>
+<td>自然人</td>
+<td>其他软件计算机软件，比如网站等</td>
+</tr>
+<tr class="even">
+<td>场景</td>
+<td></td>
+<td></td>
+<td></td>
+</tr>
+<tr class="odd">
+<td>接口</td>
+<td></td>
+<td></td>
+<td></td>
+</tr>
+<tr class="even">
+<td>协议</td>
+<td></td>
+<td></td>
+<td></td>
+</tr>
+<tr class="odd">
+<td>架构</td>
+<td></td>
+<td></td>
+<td></td>
+</tr>
+</tbody>
+</table>
+<h1 id="参考资料">参考资料</h1>
+<ol type="1">
+<li><a target="_blank" rel="noopener" href="https://www.infoq.cn/article/virtual-forum-three-basic-issues-about-distributed-storage/">虚拟座谈会：有关分布式存储的三个基本问题</a></li>
+<li>https://www.zhihu.com/question/21536660/answer/225915740</li>
+</ol>
+
+            </div>
+            <hr>
+            <div>
+              <div class="post-metas mb-3">
+                
+                  <div class="post-meta mr-3">
+                    <i class="iconfont icon-category"></i>
+                    
+                      <a class="hover-with-bg" href="/categories/%E4%B8%93%E4%B8%9A/">专业</a>
+                    
+                      <a class="hover-with-bg" href="/categories/%E4%B8%93%E4%B8%9A/%E5%BC%80%E5%8F%91/">开发</a>
+                    
+                      <a class="hover-with-bg" href="/categories/%E4%B8%93%E4%B8%9A/%E5%BC%80%E5%8F%91/%E5%AD%98%E5%82%A8/">存储</a>
+                    
+                  </div>
+                
+                
+                  <div class="post-meta">
+                    <i class="iconfont icon-tags"></i>
+                    
+                      <a class="hover-with-bg" href="/tags/storage/">storage</a>
+                    
+                      <a class="hover-with-bg" href="/tags/%E5%88%86%E5%B8%83%E5%BC%8F/">分布式</a>
+                    
+                  </div>
+                
+              </div>
+              
+                <p class="note note-warning">
+                  
+                    本博客所有文章除特别声明外，均采用 <a target="_blank" href="https://creativecommons.org/licenses/by-sa/4.0/deed.zh" rel="nofollow noopener noopener">CC BY-SA 4.0 协议</a> ，转载请注明出处！
+                  
+                </p>
+              
+              
+                <div class="post-prevnext">
+                  <article class="post-prev col-6">
+                    
+                    
+                      <a href="/2022/01/03/linix-io-stack/">
+                        <i class="iconfont icon-arrowleft"></i>
+                        <span class="hidden-mobile">Linux I/O 基本原理</span>
+                        <span class="visible-mobile">上一篇</span>
+                      </a>
+                    
+                  </article>
+                  <article class="post-next col-6">
+                    
+                    
+                      <a href="/2021/12/29/erasure-code-1st-part/">
+                        <span class="hidden-mobile">Erasure Code系列之一: 原理篇</span>
+                        <span class="visible-mobile">下一篇</span>
+                        <i class="iconfont icon-arrowright"></i>
+                      </a>
+                    
+                  </article>
+                </div>
+              
+            </div>
+
+            
+          </article>
+        </div>
+      </div>
+    </div>
+    
+      <div class="d-none d-lg-block col-lg-2 toc-container" id="toc-ctn">
+        <div id="toc">
+  <p class="toc-header"><i class="iconfont icon-list"></i>&nbsp;目录</p>
+  <div class="toc-body" id="toc-body"></div>
+</div>
+
+      </div>
+    
+  </div>
+</div>
+
+<!-- Custom -->
+
+
+    
+
+    
+      <a id="scroll-top-button" aria-label="TOP" href="#" role="button">
+        <i class="iconfont icon-arrowup" aria-hidden="true"></i>
+      </a>
+    
+
+    
+      <div class="modal fade" id="modalSearch" tabindex="-1" role="dialog" aria-labelledby="ModalLabel"
+     aria-hidden="true">
+  <div class="modal-dialog modal-dialog-scrollable modal-lg" role="document">
+    <div class="modal-content">
+      <div class="modal-header text-center">
+        <h4 class="modal-title w-100 font-weight-bold">搜索</h4>
+        <button type="button" id="local-search-close" class="close" data-dismiss="modal" aria-label="Close">
+          <span aria-hidden="true">&times;</span>
+        </button>
+      </div>
+      <div class="modal-body mx-3">
+        <div class="md-form mb-5">
+          <input type="text" id="local-search-input" class="form-control validate">
+          <label data-error="x" data-success="v"
+                 for="local-search-input">关键词</label>
+        </div>
+        <div class="list-group" id="local-search-result"></div>
+      </div>
+    </div>
+  </div>
+</div>
+    
+
+    
+  </main>
+
+  <footer class="text-center mt-5 py-3">
+  <div class="footer-content">
+     <a href="https://hexo.io" target="_blank" rel="nofollow noopener"><span>Hexo</span></a> <i class="iconfont icon-love"></i> <a href="https://github.com/fluid-dev/hexo-theme-fluid" target="_blank" rel="nofollow noopener"><span>Fluid</span></a> 
+  </div>
+  
+
+  
+
+  
+</footer>
+
+
+  <!-- SCRIPTS -->
+  
+  <script  src="https://cdn.jsdelivr.net/npm/nprogress@0/nprogress.min.js" ></script>
+  <link  rel="stylesheet" href="https://cdn.jsdelivr.net/npm/nprogress@0/nprogress.min.css" />
+
+  <script>
+    NProgress.configure({"showSpinner":false,"trickleSpeed":100})
+    NProgress.start()
+    window.addEventListener('load', function() {
+      NProgress.done();
+    })
+  </script>
+
+
+<script  src="https://cdn.jsdelivr.net/npm/jquery@3/dist/jquery.min.js" ></script>
+<script  src="https://cdn.jsdelivr.net/npm/bootstrap@4/dist/js/bootstrap.min.js" ></script>
+<script  src="/js/events.js" ></script>
+<script  src="/js/plugins.js" ></script>
+
+<!-- Plugins -->
+
+
+  <script  src="/js/local-search.js" ></script>
+
+
+
+  
+    <script  src="/js/img-lazyload.js" ></script>
+  
+
+
+
+  
+
+
+
+  
+    <script  src="https://cdn.jsdelivr.net/npm/tocbot@4/dist/tocbot.min.js" ></script>
+  
+  
+    <script  src="https://cdn.jsdelivr.net/npm/@fancyapps/fancybox@3/dist/jquery.fancybox.min.js" ></script>
+  
+  
+    <script  src="https://cdn.jsdelivr.net/npm/anchor-js@4/anchor.min.js" ></script>
+  
+  
+    <script defer src="https://cdn.jsdelivr.net/npm/clipboard@2/dist/clipboard.min.js" ></script>
+  
+
+
+
+
+
+
+  <script  src="https://cdn.jsdelivr.net/npm/typed.js@2/lib/typed.min.js" ></script>
+  <script>
+    (function (window, document) {
+      var typing = Fluid.plugins.typing;
+      var title = document.getElementById('subtitle').title;
+      
+      typing(title)
+      
+    })(window, document);
+  </script>
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+<!-- 主题的启动项 保持在最底部 -->
+<script  src="/js/boot.js" ></script>
+
+
+</body>
+</html>
