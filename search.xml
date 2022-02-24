@@ -3,9 +3,9 @@
   <entry>
     <title>云原生存储漫谈系列之一：块存储 vs. 文件存储 vs. 对象存储</title>
     <url>/2022/01/01/block-storage-and-filesystem-storage-and-object-storage/</url>
-    <content><![CDATA[<p>在大数据上云的背景下，云上存储，或者说云原生存储，成为了公有云和私有云都无法绕过的话题。针对者三种存储后端，网络上有不少描述的文章，但大多是泛泛阐述使用场景、性能和罗列概念。本文将以比较“人话”的方式，讨论三者之间的本质区别。</p>
+    <content><![CDATA[<p>在大数据上云的背景下，云原生存储成为了公有云和私有云都无法绕过的话题。针对者三种存储后端，网络上有不少描述的文章，但大多是泛泛阐述使用场景、性能和罗列概念。本文将以比较“人话”的方式，讨论三者之间的本质区别。</p>
 <span id="more"></span>
-<h1 id="背景">背景</h1>
+<h1 id="背景">1 背景</h1>
 <p>首先厘清讨论背景：本文是在分布式存储的大框架下，讨论三种存储产品的区别。在非分布式场景下，它们对应的产品形态为：</p>
 <table>
 <thead>
@@ -25,12 +25,12 @@
 </tr>
 <tr class="odd">
 <td>对象存储</td>
-<td>键值数据库。把对象Object作为值Value存储，就是单机版对象存储</td>
+<td>键值数据库。把对象Object作为值value存储，就是单机版对象存储</td>
 </tr>
 </tbody>
 </table>
-<p>由此看来，分布式存储系统就是在传统的单机接口上重新包装了一层分布式事务处理逻辑实现的。</p>
-<h1 id="正文">正文</h1>
+<p>由此看来，分布式存储系统就是在传统的单机接口上重新包装了一层分布式事务处理逻辑和访问接口实现的。</p>
+<h1 id="正文">2 正文</h1>
 <p>先看一个知乎上最高赞的答案，这个回答是我比较认同的，通俗易懂并且逻辑清晰。</p>
 <blockquote>
 <p>看了一圈回答，似乎没有回答说到“本质差别”。</p>
@@ -62,8 +62,15 @@
 <p><strong>分布式存储</strong></p>
 <p>所谓分布式存储，就是这个底层的存储系统，因为要存放的数据非常多，单一服务器所能连接的物理介质是有限的，提供的IO性能也是有限的，所以通过多台服务器协同工作，每台服务器连接若干物理介质，一起为多个系统提供存储服务。为了满足不同的访问需求，往往一个分布式存储系统，可以同时提供文件存储、块存储和对象存储这三种形式的服务。</p>
 </blockquote>
-<p>“用户不同”，道出了三种存储的本质区别，这是一种非常易懂，让没有存储背景的人都能理解的阐述方式。翻译成比较专业的描述，就是<strong>场景</strong>不同，<strong>接口</strong>不同，<strong>协议</strong>不同，<strong>架构</strong>不同</p>
+<p>“用户不同”，道出了三种存储的本质区别，这是一种非常易懂，让没有存储背景的人都能理解的阐述方式。翻译成比较专业的描述，就是<strong>场景</strong>不同，<strong>接口</strong>不同，<strong>协议</strong>不同，<strong>架构</strong>不同。</p>
+<h2 id="三者对比">2.1 三者对比</h2>
 <table>
+<colgroup>
+<col style="width: 6%" />
+<col style="width: 31%" />
+<col style="width: 31%" />
+<col style="width: 31%" />
+</colgroup>
 <thead>
 <tr class="header">
 <th></th>
@@ -74,41 +81,58 @@
 </thead>
 <tbody>
 <tr class="odd">
-<td>用户</td>
-<td>可以读写块设备的软件系统，比如数据库、文件系统等</td>
-<td>自然人</td>
-<td>其他软件计算机软件，比如网站等</td>
-</tr>
-<tr class="even">
-<td>场景</td>
-<td></td>
-<td></td>
-<td></td>
-</tr>
-<tr class="odd">
-<td>接口</td>
-<td></td>
-<td></td>
+<td><strong>基本介绍</strong></td>
+<td>低时延、持久性、高可靠的块级随机存储。块存储支持在可用区内自动复制数据，防止意外硬件故障导致的数据不可用。</td>
+<td>可扩展的并行文件存储系统，提供对数据毫秒级的访问和百万级IOPS的数据读写请求</td>
 <td></td>
 </tr>
 <tr class="even">
-<td>协议</td>
-<td></td>
-<td></td>
-<td></td>
+<td><strong>产品</strong></td>
+<td>传统存储：DAS, FC-SAN, IP-SAN<br>公有云存储：AWS EBS, 阿里云EBS<br>开源：Ceph RBD, longhorn, openEBS</td>
+<td>传统存储：NAS<br>公有云存储：阿里云HDFS/CPFS<br>开源： CephFS, juiceFS, chubaoFS, MooseFS, SeaweedFS</td>
+<td>公有云存储：Amazon S3, Swift, OSS等； <br>开源：Ceph RADOS, MinIO, OpenIO</td>
 </tr>
 <tr class="odd">
-<td>架构</td>
+<td><strong>访问接口</strong></td>
+<td>块存储多以QEMU Driver或者Kernel Module的形式存在，这种接口需要实现Linux的Block Device的接口或者QEMU提供的Block Driver接口。块存储是最接近存储介质（硬盘）的接口。</td>
+<td>通常支持POSIX接口（open/read/write/seek/close等），跟传统的文件系统如EXT4一个类型，区别在于分布式存储提供了并行化能力。广义上讲，也会把GFS，HDFS这种非POSIX接口的类文件存储归于此类。</td>
+<td>通常是HTTP封装的RESTful API，包括GET/PUT/DEL和其他扩展，实现创建、修改、删除桶，上传、下载、删除对象等操作。开发者也可以通过官方SDK访问。</td>
+</tr>
+<tr class="even">
+<td><strong>访问协议</strong></td>
+<td>iSCSI, FCP, FCIP, FCoE</td>
+<td>NFS, CIFS, SMB</td>
+<td>S3/HTTPS</td>
+</tr>
+<tr class="odd">
+<td><strong>适用场景</strong></td>
 <td></td>
-<td></td>
-<td></td>
+<td>深度训练、自动驾驶、基因计算、EDA仿真、石油勘探、气象分析、机器学习、大数据分析以及影视渲染等业务场景</td>
+<td>1. 适合企业级数据湖，作为统一的存储池，不仅可对接多种数据输入方式，还可以存储任意规模的结构化、半结构化、非结构化数据<br>2. 适合移动应用、大型网站、图片分享或者热点音视频的存储<br>3. 适合存储访问频率低的数据，如归档数据；</td>
 </tr>
 </tbody>
 </table>
-<h1 id="参考资料">参考资料</h1>
+<h2 id="架构详解">2.2 架构详解</h2>
+<h3 id="对象存储">对象存储</h3>
+<p>对象存储服务的基本组成是桶和对象。</p>
+<p>桶是存储对象的容器，每个桶都有自己的存储类别、访问权限、所属区域等属性，用户在互联网上通过桶的访问域名来定位桶。</p>
+<p>对象是数据存储的基本单位，一个对象实际是一个文件的数据与其相关属性信息的集合体，包括Key、Metadata、Data三部分：</p>
+<ul>
+<li><p>Key：键值，即对象的名称，为经过UTF-8编码的长度大于0且不超过1024的字符序列。一个桶里的每个对象必须拥有唯一的对象键值。</p></li>
+<li><p>Metadata：元数据，即对象的描述信息，包括系统元数据和用户元数据，这些元数据以键值对（Key-Value）的形式被上传到</p>
+<p>对象存储系统中。</p>
+<ul>
+<li>系统元数据由存储系统自动产生，在处理对象数据时使用，包括Date，Content-length，Last-modify，ETag等。</li>
+<li>用户元数据由用户在上传对象时指定，是用户自定义的对象描述信息。</li>
+</ul></li>
+<li><p>Data：数据，即文件的数据内容。</p></li>
+</ul>
+<h1 id="参考资料">3 参考资料</h1>
 <ol type="1">
 <li><a href="https://www.infoq.cn/article/virtual-forum-three-basic-issues-about-distributed-storage/">虚拟座谈会：有关分布式存储的三个基本问题</a></li>
 <li>https://www.zhihu.com/question/21536660/answer/225915740</li>
+<li>https://blog.csdn.net/dba_monkey/article/details/60963114</li>
+<li>https://www.cnblogs.com/cxuanBlog/p/12565601.html</li>
 </ol>
 ]]></content>
       <categories>
@@ -119,6 +143,54 @@
       <tags>
         <tag>storage</tag>
         <tag>分布式</tag>
+      </tags>
+  </entry>
+  <entry>
+    <title>如何强制删除&quot;Device Busy&quot;状态的devicemapper设备</title>
+    <url>/2021/11/26/dmsetup-delete-deivce-busy/</url>
+    <content><![CDATA[<p><code>dmsetup remove &lt;device&gt;</code>设备时，偶尔出现<code>Device Busy</code>无法删除。本文提供一种强制删除dm设备的操作步骤，可能无法解决所有的问题。后续需要深入研究Linux devicemapper的IO栈，找到根因。</p>
+<span id="more"></span>
+<h2 id="step-1">Step 1</h2>
+<p><code>mount | grep xxx</code>， 查看设备是否正在被挂载使用；如果设备正在被挂载，使用Linux umount解挂载。注意，如果设备有多个挂载点，需要多次执行umount知道所有挂载点被解挂载。</p>
+<h2 id="step-2">Step 2</h2>
+<p><code>lsof</code>&amp; <code>fuser</code>查看是否有进程正在使用该设备；如果有进程正在使用，在确保进程可以杀死后，<code>kill -9 &lt;pid&gt;</code></p>
+<h2 id="step-3">Step 3</h2>
+<p>如果没有挂载且没有进程正在使用</p>
+<ol type="1">
+<li><code>dmsetup status pvc-xxx</code>， 查看设备table</li>
+</ol>
+<figure class="highlight subunit"><table><tr><td class="code"><pre><code class="hljs subunit">[root@node<span class="hljs-string">-172</span><span class="hljs-string">-16</span><span class="hljs-string">-124</span><span class="hljs-string">-14</span> ~]# dmsetup status pvc-af945d77<span class="hljs-string">-234</span>c<span class="hljs-string">-49</span>b8-bc4c<span class="hljs-string">-3</span>d360c01bb19<br>0 419430400 thin 286720 419430399<br></code></pre></td></tr></table></figure>
+<ol start="2" type="1">
+<li><code>dmsetup reload</code>重写dm table将设备设置为error</li>
+</ol>
+<figure class="highlight subunit"><table><tr><td class="code"><pre><code class="hljs subunit">[root@node<span class="hljs-string">-172</span><span class="hljs-string">-16</span><span class="hljs-string">-124</span><span class="hljs-string">-14</span> ~]# dmsetup reload pvc-af945d77<span class="hljs-string">-234</span>c<span class="hljs-string">-49</span>b8-bc4c<span class="hljs-string">-3</span>d360c01bb19 --table &quot;0 419430400 error&quot;<br></code></pre></td></tr></table></figure>
+<ol start="3" type="1">
+<li><code>dmsetup suspend</code></li>
+</ol>
+<figure class="highlight subunit"><table><tr><td class="code"><pre><code class="hljs subunit">[root@node<span class="hljs-string">-172</span><span class="hljs-string">-16</span><span class="hljs-string">-124</span><span class="hljs-string">-14</span> ~]# dmsetup suspend --noflush pvc-af945d77<span class="hljs-string">-234</span>c<span class="hljs-string">-49</span>b8-bc4c<span class="hljs-string">-3</span>d360c01bb19<br></code></pre></td></tr></table></figure>
+<ol start="4" type="1">
+<li><code>dmsetup resume</code></li>
+</ol>
+<figure class="highlight subunit"><table><tr><td class="code"><pre><code class="hljs subunit">[root@node<span class="hljs-string">-172</span><span class="hljs-string">-16</span><span class="hljs-string">-124</span><span class="hljs-string">-14</span> ~]# dmsetup resume pvc-af945d77<span class="hljs-string">-234</span>c<span class="hljs-string">-49</span>b8-bc4c<span class="hljs-string">-3</span>d360c01bb19<br></code></pre></td></tr></table></figure>
+<ol start="5" type="1">
+<li><code>dmsetup status pvc-xxx</code>，确认状态是error</li>
+</ol>
+<figure class="highlight subunit"><table><tr><td class="code"><pre><code class="hljs subunit">[root@node<span class="hljs-string">-172</span><span class="hljs-string">-16</span><span class="hljs-string">-124</span><span class="hljs-string">-14</span> ~]# dmsetup status pvc-af945d77<span class="hljs-string">-234</span>c<span class="hljs-string">-49</span>b8-bc4c<span class="hljs-string">-3</span>d360c01bb19<br>0 419430400 error <br></code></pre></td></tr></table></figure>
+<ol start="6" type="1">
+<li><code>dmsetup remove --force</code>删除设备</li>
+</ol>
+<figure class="highlight subunit"><table><tr><td class="code"><pre><code class="hljs subunit">[root@node<span class="hljs-string">-172</span><span class="hljs-string">-16</span><span class="hljs-string">-124</span><span class="hljs-string">-14</span> ~]# dmsetup remove --force pvc-af945d77<span class="hljs-string">-234</span>c<span class="hljs-string">-49</span>b8-bc4c<span class="hljs-string">-3</span>d360c01bb19<br></code></pre></td></tr></table></figure>
+]]></content>
+      <categories>
+        <category>专业</category>
+        <category>开发</category>
+        <category>Linux</category>
+        <category>devicemapper</category>
+      </categories>
+      <tags>
+        <tag>storage</tag>
+        <tag>Linux</tag>
+        <tag>devicemapper</tag>
       </tags>
   </entry>
   <entry>
@@ -185,94 +257,92 @@
       </tags>
   </entry>
   <entry>
-    <title>如何强制删除&quot;Device Busy&quot;状态的devicemapper设备</title>
-    <url>/2021/11/26/dmsetup-delete-deivce-busy/</url>
-    <content><![CDATA[<p><code>dmsetup remove &lt;device&gt;</code>设备时，偶尔出现<code>Device Busy</code>无法删除。本文提供一种强制删除dm设备的操作步骤，可能无法解决所有的问题。后续需要深入研究Linux devicemapper的IO栈，找到根因。</p>
+    <title>两个goroutine交叉打印奇偶数字</title>
+    <url>/2021/10/13/print-even-and-odd-numbers-in-two-goroutines/</url>
+    <content><![CDATA[<p>之前面试被问到过一个比较简单的进程同步场景：如何使用两个进程（golang就是两个go routine) 交叉打印1-100这100个数字。在作为面试官的时候也问过候选人这个问题，但是没有深入总结过这个问题有多少解决方案。本文主要记录一下分析过程。</p>
 <span id="more"></span>
-<h2 id="step-1">Step 1</h2>
-<p><code>mount | grep xxx</code>， 查看设备是否正在被挂载使用；如果设备正在被挂载，使用Linux umount解挂载。注意，如果设备有多个挂载点，需要多次执行umount知道所有挂载点被解挂载。</p>
-<h2 id="step-2">Step 2</h2>
-<p><code>lsof</code>&amp; <code>fuser</code>查看是否有进程正在使用该设备；如果有进程正在使用，在确保进程可以杀死后，<code>kill -9 &lt;pid&gt;</code></p>
-<h2 id="step-3">Step 3</h2>
-<p>如果没有挂载且没有进程正在使用</p>
+<h2 id="解答思路">解答思路</h2>
+<p>第一反应是用两个无缓冲channel实现两个go routine之间的信息交互，互相阻塞实现同步。</p>
+<figure class="highlight go"><table><tr><td class="code"><pre><code class="hljs go"><span class="hljs-keyword">package</span> main<br><br><span class="hljs-keyword">import</span> (<br>	<span class="hljs-string">&quot;fmt&quot;</span><br>	<span class="hljs-string">&quot;sync&quot;</span><br>)<br><br><span class="hljs-function"><span class="hljs-keyword">func</span> <span class="hljs-title">main</span><span class="hljs-params">()</span></span> &#123;<br><br>	wg := sync.WaitGroup&#123;&#125;<br><br>	wg.Add(<span class="hljs-number">2</span>)<br><br>	channel1 := <span class="hljs-built_in">make</span>(<span class="hljs-keyword">chan</span> <span class="hljs-keyword">struct</span>&#123;&#125;)<br>	channel2 := <span class="hljs-built_in">make</span>(<span class="hljs-keyword">chan</span> <span class="hljs-keyword">struct</span>&#123;&#125;)<br><br>	<span class="hljs-keyword">go</span> <span class="hljs-function"><span class="hljs-keyword">func</span><span class="hljs-params">()</span></span> &#123;<br>		<span class="hljs-keyword">defer</span> wg.Done()<br>		<span class="hljs-keyword">for</span> i := <span class="hljs-number">0</span>; i &lt;= <span class="hljs-number">100</span>; i++ &#123;<br>			<span class="hljs-keyword">if</span> i%<span class="hljs-number">2</span> != <span class="hljs-number">0</span> &#123;<br>				<span class="hljs-keyword">continue</span><br>			&#125;<br>			&lt;-channel2<br>			fmt.Printf(<span class="hljs-string">&quot;goroutine a: %d\n&quot;</span>, i)<br>			channel1 &lt;- <span class="hljs-keyword">struct</span>&#123;&#125;&#123;&#125;<br>		&#125;<br>	&#125;()<br><br>	<span class="hljs-keyword">go</span> <span class="hljs-function"><span class="hljs-keyword">func</span><span class="hljs-params">()</span></span> &#123;<br>		<span class="hljs-keyword">defer</span> wg.Done()<br>		<span class="hljs-keyword">for</span> i := <span class="hljs-number">0</span>; i &lt;= <span class="hljs-number">100</span>; i++ &#123;<br>			<span class="hljs-keyword">if</span> i%<span class="hljs-number">2</span> == <span class="hljs-number">0</span> &#123;<br>				<span class="hljs-keyword">continue</span><br>			&#125;<br>			&lt;-channel1<br>			fmt.Printf(<span class="hljs-string">&quot;goroutine b: %d\n&quot;</span>, i)<br>			channel2 &lt;- <span class="hljs-keyword">struct</span>&#123;&#125;&#123;&#125;<br>		&#125;<br>	&#125;()<br><br>	wg.Wait()<br>&#125;<br></code></pre></td></tr></table></figure>
+<p>但是这种解法有明显的问题：两个go routine互相死锁。原因显而易见，两个channel互相阻塞导致。</p>
+<figure class="highlight elixir"><table><tr><td class="code"><pre><code class="hljs elixir">chao<span class="hljs-variable">@chao</span><span class="hljs-symbol">:~/code/src/demo</span><span class="hljs-variable">$ </span>go run main.go<br>fatal <span class="hljs-symbol">error:</span> all goroutines are asleep - deadlock!<br></code></pre></td></tr></table></figure>
+<p>那么，只用一个channel能否解决这个问题？</p>
+<figure class="highlight go"><table><tr><td class="code"><pre><code class="hljs go"><span class="hljs-function"><span class="hljs-keyword">func</span> <span class="hljs-title">main</span><span class="hljs-params">()</span></span> &#123;<br><br>	wg := sync.WaitGroup&#123;&#125;<br><br>	wg.Add(<span class="hljs-number">2</span>)<br><br>	channel := <span class="hljs-built_in">make</span>(<span class="hljs-keyword">chan</span> <span class="hljs-keyword">struct</span>&#123;&#125;)<br><br>	<span class="hljs-keyword">go</span> <span class="hljs-function"><span class="hljs-keyword">func</span><span class="hljs-params">()</span></span> &#123;<br>		<span class="hljs-keyword">defer</span> wg.Done()<br>		<span class="hljs-keyword">for</span> i := <span class="hljs-number">0</span>; i &lt;= <span class="hljs-number">100</span>; i++ &#123;<br>			<span class="hljs-keyword">if</span> i%<span class="hljs-number">2</span> != <span class="hljs-number">0</span> &#123;<br>				<span class="hljs-keyword">continue</span><br>			&#125;<br>			fmt.Printf(<span class="hljs-string">&quot;goroutine a: %d\n&quot;</span>, i)<br>			channel &lt;- <span class="hljs-keyword">struct</span>&#123;&#125;&#123;&#125;<br>		&#125;<br>	&#125;()<br><br>	<span class="hljs-keyword">go</span> <span class="hljs-function"><span class="hljs-keyword">func</span><span class="hljs-params">()</span></span> &#123;<br>		<span class="hljs-keyword">defer</span> wg.Done()<br>		<span class="hljs-keyword">for</span> i := <span class="hljs-number">0</span>; i &lt;= <span class="hljs-number">100</span>; i++ &#123;<br>			<span class="hljs-keyword">if</span> i%<span class="hljs-number">2</span> == <span class="hljs-number">0</span> &#123;<br>				<span class="hljs-keyword">continue</span><br>			&#125;<br>			&lt;-channel<br>			fmt.Printf(<span class="hljs-string">&quot;goroutine b: %d\n&quot;</span>, i)<br>		&#125;<br>	&#125;()<br><br>	wg.Wait()<br>&#125;<br></code></pre></td></tr></table></figure>
+<figure class="highlight vim"><table><tr><td class="code"><pre><code class="hljs vim">chao@chao:~/code/src/demo$ <span class="hljs-keyword">go</span> run main.<span class="hljs-keyword">go</span><br>goroutine <span class="hljs-variable">a:</span> <span class="hljs-number">0</span><br>goroutine <span class="hljs-variable">a:</span> <span class="hljs-number">2</span><br>goroutine <span class="hljs-variable">b:</span> <span class="hljs-number">1</span><br>goroutine <span class="hljs-variable">b:</span> <span class="hljs-number">3</span><br>goroutine <span class="hljs-variable">a:</span> <span class="hljs-number">4</span><br>goroutine <span class="hljs-variable">a:</span> <span class="hljs-number">6</span><br>goroutine <span class="hljs-variable">b:</span> <span class="hljs-number">5</span><br>goroutine <span class="hljs-variable">b:</span> <span class="hljs-number">7</span><br>goroutine <span class="hljs-variable">a:</span> <span class="hljs-number">8</span><br>goroutine <span class="hljs-variable">a:</span> <span class="hljs-number">10</span><br>goroutine <span class="hljs-variable">b:</span> <span class="hljs-number">9</span><br>goroutine <span class="hljs-variable">b:</span> <span class="hljs-number">11</span><br>...<br>goroutine <span class="hljs-variable">a:</span> <span class="hljs-number">100</span><br>fatal error: <span class="hljs-keyword">all</span> goroutines are asleep - deadlock!<br><br>goroutine <span class="hljs-number">1</span> [semacquire]:<br></code></pre></td></tr></table></figure>
+<p>乍一看解决方案清晰明了，但是运行结果不尽如人意：</p>
 <ol type="1">
-<li><code>dmsetup status pvc-xxx</code>， 查看设备table</li>
+<li>每个go routine会两个两个交叉打印</li>
+<li>最终还是有死锁问题出现</li>
 </ol>
-<figure class="highlight subunit"><table><tr><td class="code"><pre><code class="hljs subunit">[root@node<span class="hljs-string">-172</span><span class="hljs-string">-16</span><span class="hljs-string">-124</span><span class="hljs-string">-14</span> ~]# dmsetup status pvc-af945d77<span class="hljs-string">-234</span>c<span class="hljs-string">-49</span>b8-bc4c<span class="hljs-string">-3</span>d360c01bb19<br>0 419430400 thin 286720 419430399<br></code></pre></td></tr></table></figure>
-<ol start="2" type="1">
-<li><code>dmsetup reload</code>重写dm table将设备设置为error</li>
-</ol>
-<figure class="highlight subunit"><table><tr><td class="code"><pre><code class="hljs subunit">[root@node<span class="hljs-string">-172</span><span class="hljs-string">-16</span><span class="hljs-string">-124</span><span class="hljs-string">-14</span> ~]# dmsetup reload pvc-af945d77<span class="hljs-string">-234</span>c<span class="hljs-string">-49</span>b8-bc4c<span class="hljs-string">-3</span>d360c01bb19 --table &quot;0 419430400 error&quot;<br></code></pre></td></tr></table></figure>
-<ol start="3" type="1">
-<li><code>dmsetup suspend</code></li>
-</ol>
-<figure class="highlight subunit"><table><tr><td class="code"><pre><code class="hljs subunit">[root@node<span class="hljs-string">-172</span><span class="hljs-string">-16</span><span class="hljs-string">-124</span><span class="hljs-string">-14</span> ~]# dmsetup suspend --noflush pvc-af945d77<span class="hljs-string">-234</span>c<span class="hljs-string">-49</span>b8-bc4c<span class="hljs-string">-3</span>d360c01bb19<br></code></pre></td></tr></table></figure>
-<ol start="4" type="1">
-<li><code>dmsetup resume</code></li>
-</ol>
-<figure class="highlight subunit"><table><tr><td class="code"><pre><code class="hljs subunit">[root@node<span class="hljs-string">-172</span><span class="hljs-string">-16</span><span class="hljs-string">-124</span><span class="hljs-string">-14</span> ~]# dmsetup resume pvc-af945d77<span class="hljs-string">-234</span>c<span class="hljs-string">-49</span>b8-bc4c<span class="hljs-string">-3</span>d360c01bb19<br></code></pre></td></tr></table></figure>
-<ol start="5" type="1">
-<li><code>dmsetup status pvc-xxx</code>，确认状态是error</li>
-</ol>
-<figure class="highlight subunit"><table><tr><td class="code"><pre><code class="hljs subunit">[root@node<span class="hljs-string">-172</span><span class="hljs-string">-16</span><span class="hljs-string">-124</span><span class="hljs-string">-14</span> ~]# dmsetup status pvc-af945d77<span class="hljs-string">-234</span>c<span class="hljs-string">-49</span>b8-bc4c<span class="hljs-string">-3</span>d360c01bb19<br>0 419430400 error <br></code></pre></td></tr></table></figure>
-<ol start="6" type="1">
-<li><code>dmsetup remove --force</code>删除设备</li>
-</ol>
-<figure class="highlight subunit"><table><tr><td class="code"><pre><code class="hljs subunit">[root@node<span class="hljs-string">-172</span><span class="hljs-string">-16</span><span class="hljs-string">-124</span><span class="hljs-string">-14</span> ~]# dmsetup remove --force pvc-af945d77<span class="hljs-string">-234</span>c<span class="hljs-string">-49</span>b8-bc4c<span class="hljs-string">-3</span>d360c01bb19<br></code></pre></td></tr></table></figure>
+<p>接下来从go routine调度的过程来分析这种方案的错误。首先需要了解go routine的调度逻辑：</p>
+<p>在谈goroutine之前，我们先谈谈并发和并行。</p>
+<p>一般的程序，如果没有特别的要求的话，是顺序执行的，这样的程序也容易编写维护。但是随着科技的发展、业务的演进，我们不得不变写可以并行的程序，因为这样有很多好处。</p>
+<p>比如你在看文章的时候，还可以听着音乐，这就是系统的并行，同时可以做多件事情，充分的利用计算机的多核，提升的软件运行的性能。</p>
+<p>在操作系统中，有两个重要的概念：一个是进程、一个是线程。当我们运行一个程序的时候，比如你的IDE或者QQ等，操作系统会为这个程序创建一个进程，这个进程包含了运行这个程序所需的各种资源，可以说它是一个容器，是属于这个程序的工作空间，比如它里面有内存空间、文件句柄、设备和线程等等。</p>
+<p>那么线程是什么呢？线程是一个执行的空间，比如要下载一个文件，访问一次网络等等。线程会被操作系统调用，来在不同的处理器上运行编写的代码任务，这个处理器不一定是该程序进程所在的处理。操作系统过的调度是操作系统负责的，不同的操作系统可能会不一样，但是对于我们程序编写者来说，不用关心，因为对我们都是透明的。</p>
+<p>一个进程在启动的时候，会创建一个主线程，这个主线程结束的时候，程序进程也就终止了，所以一个进程至少有一个线程，这也是我们在<code>main</code>函数里，使用goroutine的时候，要让主线程等待的原因，因为主线程结束了，程序就终止了，那么就有可能会看不到goroutine的输出。</p>
+<p>在一个并发指的是将</p>
+<p>go语言中并发指的是让某个函数独立于其他函数运行的能力，一个goroutine就是一个独立的工作单元，Go的runtime（运行时）会在<strong>逻辑处理器</strong>上调度这些goroutine来运行，一个<strong>逻辑处理器</strong>绑定一个操作系统线程，所以说goroutine不是线程，它是一个协程，也是这个原因，它是由Go语言运行时本身的算法实现的。</p>
+<p>这里我们总结下几个概念：</p>
+<table>
+<thead>
+<tr class="header">
+<th style="text-align: left;">概念</th>
+<th style="text-align: left;">说明</th>
+</tr>
+</thead>
+<tbody>
+<tr class="odd">
+<td style="text-align: left;">进程</td>
+<td style="text-align: left;">一个程序对应一个独立程序空间</td>
+</tr>
+<tr class="even">
+<td style="text-align: left;">线程</td>
+<td style="text-align: left;">一个执行空间，一个进程可以有多个线程</td>
+</tr>
+<tr class="odd">
+<td style="text-align: left;">逻辑处理器</td>
+<td style="text-align: left;">执行创建的goroutine，绑定一个线程</td>
+</tr>
+<tr class="even">
+<td style="text-align: left;">调度器</td>
+<td style="text-align: left;">Go运行时中的，分配goroutine给不同的逻辑处理器</td>
+</tr>
+<tr class="odd">
+<td style="text-align: left;">全局运行队列</td>
+<td style="text-align: left;">所有刚创建的goroutine都会放到这里</td>
+</tr>
+<tr class="even">
+<td style="text-align: left;">本地运行队列</td>
+<td style="text-align: left;">逻辑处理器的goroutine队列</td>
+</tr>
+</tbody>
+</table>
+<p>当我们创建一个goroutine的后，会先存放在<code>全局运行队列</code>中，等待Go运行时的<code>调度器</code>进行调度，把他们分配给其中的一个<code>逻辑处理器</code>，并放到这个逻辑处理器对应的<code>本地运行队列</code>中，最终等着被<code>逻辑处理器</code>执行即可。</p>
+<p>这一套管理、调度、执行goroutine的方式称之为Go的并发。并发可以同时做很多事情，比如有个goroutine执行了一半，就被暂停执行其他goroutine去了，这是Go控制管理的。所以并发的概念和并行不一样，并行指的是在不同的物理处理器上同时执行不同的代码片段，<strong>并行可以同时做很多事情，而并发是同时管理很多事情</strong>，因为操作系统和硬件的总资源比较少，所以并发的效果要比并行好的多，使用较少的资源做更多的事情，也是Go语言提倡的。</p>
+<p>Go的并发原理我们刚刚讲了，那么Go的并行是怎样的呢？其实答案非常简单，多创建一个<code>逻辑处理器</code>就好了，这样调度器就可以同时分配<code>全局运行队列</code>中的goroutine到不同的<code>逻辑处理器</code>上并行执行。</p>
+<p>基于上述对goroutine调度的了解，分析为上述解法会报错：第一个执行周期，goroutine A打印“goroutine a: 0”之后，A和B都处于阻塞状态；这时A向channel中写值，A和B都解除阻塞状态；此时，期望的结果是调度器执行B，打印“goroutine b: 1”，然而调度器的行为不可知，在下一个执行周期可能会执行A，在continue之后打印“goroutine a: 2”，如下图：</p>
+<p><img src="/images/goroutine-错误方法.png" /></p>
+<p>正确的channel阻塞方案如下：</p>
+<figure class="highlight go"><table><tr><td class="code"><pre><code class="hljs go"><span class="hljs-function"><span class="hljs-keyword">func</span> <span class="hljs-title">main</span><span class="hljs-params">()</span></span> &#123;<br><br>	wg := sync.WaitGroup&#123;&#125;<br><br>	wg.Add(<span class="hljs-number">2</span>)<br><br>	channel := <span class="hljs-built_in">make</span>(<span class="hljs-keyword">chan</span> <span class="hljs-keyword">struct</span>&#123;&#125;)<br><br>	<span class="hljs-keyword">go</span> <span class="hljs-function"><span class="hljs-keyword">func</span><span class="hljs-params">()</span></span> &#123;<br>		<span class="hljs-keyword">defer</span> wg.Done()<br>		<span class="hljs-keyword">for</span> i := <span class="hljs-number">0</span>; i &lt;= <span class="hljs-number">100</span>; i++ &#123;<br>			channel &lt;- <span class="hljs-keyword">struct</span>&#123;&#125;&#123;&#125;<br>			<span class="hljs-keyword">if</span> i%<span class="hljs-number">2</span> != <span class="hljs-number">0</span> &#123;<br>				<span class="hljs-keyword">continue</span><br>			&#125;<br>			fmt.Printf(<span class="hljs-string">&quot;goroutine a: %d\n&quot;</span>, i)<br>		&#125;<br>	&#125;()<br><br>	<span class="hljs-keyword">go</span> <span class="hljs-function"><span class="hljs-keyword">func</span><span class="hljs-params">()</span></span> &#123;<br>		<span class="hljs-keyword">defer</span> wg.Done()<br>		<span class="hljs-keyword">for</span> i := <span class="hljs-number">0</span>; i &lt;= <span class="hljs-number">100</span>; i++ &#123;<br>			&lt;-channel<br>			<span class="hljs-keyword">if</span> i%<span class="hljs-number">2</span> == <span class="hljs-number">0</span> &#123;<br>				<span class="hljs-keyword">continue</span><br>			&#125;<br>			fmt.Printf(<span class="hljs-string">&quot;goroutine b: %d\n&quot;</span>, i)<br>		&#125;<br>	&#125;()<br><br>	wg.Wait()<br>&#125;<br><br></code></pre></td></tr></table></figure>
+<p>这种方案两个go routine刚进入循环的时候都会被阻塞，然后每个loop周期轮流bypass和打印，如下图：</p>
+<p><img src="/images/goroutine-正确方法.png" /></p>
+<h2 id="参考资料">参考资料</h2>
+<p>https://www.flysnow.org/2017/04/11/go-in-action-go-goroutine.html</p>
+<p>Golang 调度器 GMP 原理与调度全分析：https://learnku.com/articles/41728</p>
 ]]></content>
       <categories>
         <category>专业</category>
         <category>开发</category>
-        <category>Linux</category>
-        <category>devicemapper</category>
+        <category>golang</category>
       </categories>
       <tags>
-        <tag>storage</tag>
-        <tag>Linux</tag>
-        <tag>devicemapper</tag>
+        <tag>golang</tag>
+        <tag>算法</tag>
       </tags>
   </entry>
   <entry>
-    <title>如何给git设置代理 (HTTPS/SSH)</title>
-    <url>/2021/11/26/git-proxy-configuration/</url>
-    <content><![CDATA[<h2 id="解决问题">解决问题</h2>
-<p>开发者经常需要在终端和github之间进行repository的push/pull等操作，但是由于GFW的存在，不得不通过代理保障github访问的流畅度（太不友好..）。本文简单介绍如何给github配置HTTPs和SSH代理，让开发者对代理无感知丝滑使用。</p>
-<span id="more"></span>
-<h2 id="分辨需要设置的代理">分辨需要设置的代理</h2>
-<ul>
-<li><p>HTTP 形式：</p>
-<blockquote>
-<p>git clone https://github.com/owner/git.git</p>
-</blockquote></li>
-<li><p>SSH 形式：</p>
-<blockquote>
-<p>git clone git@github.com:owner/git.git</p>
-</blockquote></li>
-</ul>
-<h2 id="http-形式">HTTP 形式</h2>
-<h3 id="走-http-代理">走 HTTP 代理</h3>
-<figure class="highlight bash"><table><tr><td class="code"><pre><code class="hljs bash">git config --global http.proxy <span class="hljs-string">&quot;http://127.0.0.1:8080&quot;</span><br>git config --global https.proxy <span class="hljs-string">&quot;http://127.0.0.1:8080&quot;</span><br></code></pre></td></tr></table></figure>
-<h3 id="走-socks5-代理如-shadowsocks">走 socks5 代理（如 Shadowsocks）</h3>
-<figure class="highlight bash"><table><tr><td class="code"><pre><code class="hljs bash">git config --global http.proxy <span class="hljs-string">&quot;socks5://127.0.0.1:1080&quot;</span><br>git config --global https.proxy <span class="hljs-string">&quot;socks5://127.0.0.1:1080&quot;</span><br></code></pre></td></tr></table></figure>
-<h3 id="取消设置">取消设置</h3>
-<figure class="highlight bash"><table><tr><td class="code"><pre><code class="hljs bash">git config --global --<span class="hljs-built_in">unset</span> http.proxy<br>git config --global --<span class="hljs-built_in">unset</span> https.proxy<br></code></pre></td></tr></table></figure>
-<h2 id="ssh-形式">SSH 形式</h2>
-<p>修改 <code>~/.ssh/config</code> 文件（不存在则新建）：</p>
-<figure class="highlight crmsh"><table><tr><td class="code"><pre><code class="hljs crmsh"><span class="hljs-comment"># 必须是 github.com</span><br>Host github.com<br>   HostName github.com<br>   <span class="hljs-keyword">User</span> <span class="hljs-title">git</span><br>   <span class="hljs-comment"># 走 HTTP 代理</span><br>   <span class="hljs-comment"># ProxyCommand socat - PROXY:127.0.0.1:%h:%p,proxyport=8080</span><br>   <span class="hljs-comment"># 走 socks5 代理（如 Shadowsocks）</span><br>   <span class="hljs-comment"># ProxyCommand nc -v -x 127.0.0.1:1080 %h %p</span><br></code></pre></td></tr></table></figure>
-]]></content>
-      <categories>
-        <category>专业</category>
-        <category>工具</category>
-        <category>git</category>
-      </categories>
-      <tags>
-        <tag>git</tag>
-        <tag>github</tag>
-        <tag>ssh</tag>
-      </tags>
-  </entry>
-  <entry>
-    <title>Linux I/O 存储栈</title>
+    <title>Linux存储系列之一: I/O Stack</title>
     <url>/2022/01/03/linux-storage-stack/</url>
     <content><![CDATA[<p>开发者在开发基于Linux平台的程序时，经常做文件的读写操作。大家平时用的各种语言，比如C/C++, Java, Go等，都对这些操作都做了高层次的封装，把很多细节都屏蔽了。为了深入了解应用程序对磁盘上的文件进行读写时，从上到下经历了哪些事情，需要剖开 Linux 的内部来看 Linux 的 IO 栈。</p>
 <span id="more"></span>
@@ -313,7 +383,10 @@
 <li>https://zhuanlan.zhihu.com/p/371574406</li>
 <li>https://zhuanlan.zhihu.com/p/441679741</li>
 <li>http://www.ilinuxkernel.com/files/Linux.IO.stack_v1.0.pdf</li>
+<li>https://segmentfault.com/a/1190000020990855</li>
 </ol>
+<h1 id="宋宝华-文件读写bio波澜壮阔的一生">宋宝华： 文件读写（BIO）波澜壮阔的一生</h1>
+<p>https://mp.weixin.qq.com/s?__biz=MzAwMDUwNDgxOA==&amp;mid=2652664116&amp;idx=1&amp;sn=7e08954c97f4fda1ee8c125ec0813a45&amp;chksm=810f37a9b678bebf5d3385855254a12f1e9373bbfd3818605a7a995bac9d3bb94b062dd8574d&amp;scene=21#wechat_redirect</p>
 ]]></content>
       <categories>
         <category>专业</category>
@@ -324,6 +397,45 @@
       <tags>
         <tag>storage</tag>
         <tag>Linux</tag>
+      </tags>
+  </entry>
+  <entry>
+    <title>如何给git设置代理 (HTTPS/SSH)</title>
+    <url>/2021/11/26/git-proxy-configuration/</url>
+    <content><![CDATA[<h2 id="解决问题">解决问题</h2>
+<p>开发者经常需要在终端和github之间进行repository的push/pull等操作，但是由于GFW的存在，不得不通过代理保障github访问的流畅度（太不友好..）。本文简单介绍如何给github配置HTTPs和SSH代理，让开发者对代理无感知丝滑使用。</p>
+<span id="more"></span>
+<h2 id="分辨需要设置的代理">分辨需要设置的代理</h2>
+<ul>
+<li><p>HTTP 形式：</p>
+<blockquote>
+<p>git clone https://github.com/owner/git.git</p>
+</blockquote></li>
+<li><p>SSH 形式：</p>
+<blockquote>
+<p>git clone git@github.com:owner/git.git</p>
+</blockquote></li>
+</ul>
+<h2 id="http-形式">HTTP 形式</h2>
+<h3 id="走-http-代理">走 HTTP 代理</h3>
+<figure class="highlight bash"><table><tr><td class="code"><pre><code class="hljs bash">git config --global http.proxy <span class="hljs-string">&quot;http://127.0.0.1:8080&quot;</span><br>git config --global https.proxy <span class="hljs-string">&quot;http://127.0.0.1:8080&quot;</span><br></code></pre></td></tr></table></figure>
+<h3 id="走-socks5-代理如-shadowsocks">走 socks5 代理（如 Shadowsocks）</h3>
+<figure class="highlight bash"><table><tr><td class="code"><pre><code class="hljs bash">git config --global http.proxy <span class="hljs-string">&quot;socks5://127.0.0.1:1080&quot;</span><br>git config --global https.proxy <span class="hljs-string">&quot;socks5://127.0.0.1:1080&quot;</span><br></code></pre></td></tr></table></figure>
+<h3 id="取消设置">取消设置</h3>
+<figure class="highlight bash"><table><tr><td class="code"><pre><code class="hljs bash">git config --global --<span class="hljs-built_in">unset</span> http.proxy<br>git config --global --<span class="hljs-built_in">unset</span> https.proxy<br></code></pre></td></tr></table></figure>
+<h2 id="ssh-形式">SSH 形式</h2>
+<p>修改 <code>~/.ssh/config</code> 文件（不存在则新建）：</p>
+<figure class="highlight crmsh"><table><tr><td class="code"><pre><code class="hljs crmsh"><span class="hljs-comment"># 必须是 github.com</span><br>Host github.com<br>   HostName github.com<br>   <span class="hljs-keyword">User</span> <span class="hljs-title">git</span><br>   <span class="hljs-comment"># 走 HTTP 代理</span><br>   <span class="hljs-comment"># ProxyCommand socat - PROXY:127.0.0.1:%h:%p,proxyport=8080</span><br>   <span class="hljs-comment"># 走 socks5 代理（如 Shadowsocks）</span><br>   <span class="hljs-comment"># ProxyCommand nc -v -x 127.0.0.1:1080 %h %p</span><br></code></pre></td></tr></table></figure>
+]]></content>
+      <categories>
+        <category>专业</category>
+        <category>工具</category>
+        <category>git</category>
+      </categories>
+      <tags>
+        <tag>git</tag>
+        <tag>github</tag>
+        <tag>ssh</tag>
       </tags>
   </entry>
   <entry>
@@ -450,79 +562,53 @@
       </tags>
   </entry>
   <entry>
-    <title>两个goroutine交叉打印奇偶数字</title>
-    <url>/2021/10/13/print-even-and-odd-numbers-in-two-goroutines/</url>
-    <content><![CDATA[<p>之前面试被问到过一个比较简单的进程同步场景：如何使用两个进程（golang就是两个go routine) 交叉打印1-100这100个数字。在作为面试官的时候也问过候选人这个问题，但是没有深入总结过这个问题有多少解决方案。本文主要记录一下分析过程。</p>
+    <title>Go sync.Cond（一）：使用方法</title>
+    <url>/2022/02/24/golang-sync-cond-1/</url>
+    <content><![CDATA[<h2 id="sync.cond-的使用场景">1 sync.Cond 的使用场景</h2>
+<blockquote>
+<p>一句话总结：<code>sync.Cond</code> 条件变量用来协调想要访问共享资源的那些 goroutine，当共享资源的状态发生变化的时候，它可以用来通知被互斥锁阻塞的 goroutine。</p>
+</blockquote>
+<p><code>sync.Cond</code> 基于互斥锁/读写锁，它和互斥锁的区别是什么呢？</p>
+<p>互斥锁 <code>sync.Mutex</code> 通常用来保护临界区和共享资源，条件变量 <code>sync.Cond</code> 用来协调想要访问共享资源的 goroutine。</p>
+<p><code>sync.Cond</code> 经常用在多个 goroutine 等待，一个 goroutine 通知（事件发生）的场景。如果是一个通知，一个等待，使用互斥锁或 channel 就能搞定了。</p>
 <span id="more"></span>
-<h2 id="解答思路">解答思路</h2>
-<p>第一反应是用两个无缓冲channel实现两个go routine之间的信息交互，互相阻塞实现同步。</p>
-<figure class="highlight go"><table><tr><td class="code"><pre><code class="hljs go"><span class="hljs-keyword">package</span> main<br><br><span class="hljs-keyword">import</span> (<br>	<span class="hljs-string">&quot;fmt&quot;</span><br>	<span class="hljs-string">&quot;sync&quot;</span><br>)<br><br><span class="hljs-function"><span class="hljs-keyword">func</span> <span class="hljs-title">main</span><span class="hljs-params">()</span></span> &#123;<br><br>	wg := sync.WaitGroup&#123;&#125;<br><br>	wg.Add(<span class="hljs-number">2</span>)<br><br>	channel1 := <span class="hljs-built_in">make</span>(<span class="hljs-keyword">chan</span> <span class="hljs-keyword">struct</span>&#123;&#125;)<br>	channel2 := <span class="hljs-built_in">make</span>(<span class="hljs-keyword">chan</span> <span class="hljs-keyword">struct</span>&#123;&#125;)<br><br>	<span class="hljs-keyword">go</span> <span class="hljs-function"><span class="hljs-keyword">func</span><span class="hljs-params">()</span></span> &#123;<br>		<span class="hljs-keyword">defer</span> wg.Done()<br>		<span class="hljs-keyword">for</span> i := <span class="hljs-number">0</span>; i &lt;= <span class="hljs-number">100</span>; i++ &#123;<br>			<span class="hljs-keyword">if</span> i%<span class="hljs-number">2</span> != <span class="hljs-number">0</span> &#123;<br>				<span class="hljs-keyword">continue</span><br>			&#125;<br>			&lt;-channel2<br>			fmt.Printf(<span class="hljs-string">&quot;goroutine a: %d\n&quot;</span>, i)<br>			channel1 &lt;- <span class="hljs-keyword">struct</span>&#123;&#125;&#123;&#125;<br>		&#125;<br>	&#125;()<br><br>	<span class="hljs-keyword">go</span> <span class="hljs-function"><span class="hljs-keyword">func</span><span class="hljs-params">()</span></span> &#123;<br>		<span class="hljs-keyword">defer</span> wg.Done()<br>		<span class="hljs-keyword">for</span> i := <span class="hljs-number">0</span>; i &lt;= <span class="hljs-number">100</span>; i++ &#123;<br>			<span class="hljs-keyword">if</span> i%<span class="hljs-number">2</span> == <span class="hljs-number">0</span> &#123;<br>				<span class="hljs-keyword">continue</span><br>			&#125;<br>			&lt;-channel1<br>			fmt.Printf(<span class="hljs-string">&quot;goroutine b: %d\n&quot;</span>, i)<br>			channel2 &lt;- <span class="hljs-keyword">struct</span>&#123;&#125;&#123;&#125;<br>		&#125;<br>	&#125;()<br><br>	wg.Wait()<br>&#125;<br></code></pre></td></tr></table></figure>
-<p>但是这种解法有明显的问题：两个go routine互相死锁。原因显而易见，两个channel互相阻塞导致。</p>
-<figure class="highlight elixir"><table><tr><td class="code"><pre><code class="hljs elixir">chao<span class="hljs-variable">@chao</span><span class="hljs-symbol">:~/code/src/demo</span><span class="hljs-variable">$ </span>go run main.go<br>fatal <span class="hljs-symbol">error:</span> all goroutines are asleep - deadlock!<br></code></pre></td></tr></table></figure>
-<p>那么，只用一个channel能否解决这个问题？</p>
-<figure class="highlight go"><table><tr><td class="code"><pre><code class="hljs go"><span class="hljs-function"><span class="hljs-keyword">func</span> <span class="hljs-title">main</span><span class="hljs-params">()</span></span> &#123;<br><br>	wg := sync.WaitGroup&#123;&#125;<br><br>	wg.Add(<span class="hljs-number">2</span>)<br><br>	channel := <span class="hljs-built_in">make</span>(<span class="hljs-keyword">chan</span> <span class="hljs-keyword">struct</span>&#123;&#125;)<br><br>	<span class="hljs-keyword">go</span> <span class="hljs-function"><span class="hljs-keyword">func</span><span class="hljs-params">()</span></span> &#123;<br>		<span class="hljs-keyword">defer</span> wg.Done()<br>		<span class="hljs-keyword">for</span> i := <span class="hljs-number">0</span>; i &lt;= <span class="hljs-number">100</span>; i++ &#123;<br>			<span class="hljs-keyword">if</span> i%<span class="hljs-number">2</span> != <span class="hljs-number">0</span> &#123;<br>				<span class="hljs-keyword">continue</span><br>			&#125;<br>			fmt.Printf(<span class="hljs-string">&quot;goroutine a: %d\n&quot;</span>, i)<br>			channel &lt;- <span class="hljs-keyword">struct</span>&#123;&#125;&#123;&#125;<br>		&#125;<br>	&#125;()<br><br>	<span class="hljs-keyword">go</span> <span class="hljs-function"><span class="hljs-keyword">func</span><span class="hljs-params">()</span></span> &#123;<br>		<span class="hljs-keyword">defer</span> wg.Done()<br>		<span class="hljs-keyword">for</span> i := <span class="hljs-number">0</span>; i &lt;= <span class="hljs-number">100</span>; i++ &#123;<br>			<span class="hljs-keyword">if</span> i%<span class="hljs-number">2</span> == <span class="hljs-number">0</span> &#123;<br>				<span class="hljs-keyword">continue</span><br>			&#125;<br>			&lt;-channel<br>			fmt.Printf(<span class="hljs-string">&quot;goroutine b: %d\n&quot;</span>, i)<br>		&#125;<br>	&#125;()<br><br>	wg.Wait()<br>&#125;<br></code></pre></td></tr></table></figure>
-<figure class="highlight vim"><table><tr><td class="code"><pre><code class="hljs vim">chao@chao:~/code/src/demo$ <span class="hljs-keyword">go</span> run main.<span class="hljs-keyword">go</span><br>goroutine <span class="hljs-variable">a:</span> <span class="hljs-number">0</span><br>goroutine <span class="hljs-variable">a:</span> <span class="hljs-number">2</span><br>goroutine <span class="hljs-variable">b:</span> <span class="hljs-number">1</span><br>goroutine <span class="hljs-variable">b:</span> <span class="hljs-number">3</span><br>goroutine <span class="hljs-variable">a:</span> <span class="hljs-number">4</span><br>goroutine <span class="hljs-variable">a:</span> <span class="hljs-number">6</span><br>goroutine <span class="hljs-variable">b:</span> <span class="hljs-number">5</span><br>goroutine <span class="hljs-variable">b:</span> <span class="hljs-number">7</span><br>goroutine <span class="hljs-variable">a:</span> <span class="hljs-number">8</span><br>goroutine <span class="hljs-variable">a:</span> <span class="hljs-number">10</span><br>goroutine <span class="hljs-variable">b:</span> <span class="hljs-number">9</span><br>goroutine <span class="hljs-variable">b:</span> <span class="hljs-number">11</span><br>...<br>goroutine <span class="hljs-variable">a:</span> <span class="hljs-number">100</span><br>fatal error: <span class="hljs-keyword">all</span> goroutines are asleep - deadlock!<br><br>goroutine <span class="hljs-number">1</span> [semacquire]:<br></code></pre></td></tr></table></figure>
-<p>乍一看解决方案清晰明了，但是运行结果不尽如人意：</p>
-<ol type="1">
-<li>每个go routine会两个两个交叉打印</li>
-<li>最终还是有死锁问题出现</li>
-</ol>
-<p>接下来从go routine调度的过程来分析这种方案的错误。首先需要了解go routine的调度逻辑：</p>
-<p>在谈goroutine之前，我们先谈谈并发和并行。</p>
-<p>一般的程序，如果没有特别的要求的话，是顺序执行的，这样的程序也容易编写维护。但是随着科技的发展、业务的演进，我们不得不变写可以并行的程序，因为这样有很多好处。</p>
-<p>比如你在看文章的时候，还可以听着音乐，这就是系统的并行，同时可以做多件事情，充分的利用计算机的多核，提升的软件运行的性能。</p>
-<p>在操作系统中，有两个重要的概念：一个是进程、一个是线程。当我们运行一个程序的时候，比如你的IDE或者QQ等，操作系统会为这个程序创建一个进程，这个进程包含了运行这个程序所需的各种资源，可以说它是一个容器，是属于这个程序的工作空间，比如它里面有内存空间、文件句柄、设备和线程等等。</p>
-<p>那么线程是什么呢？线程是一个执行的空间，比如要下载一个文件，访问一次网络等等。线程会被操作系统调用，来在不同的处理器上运行编写的代码任务，这个处理器不一定是该程序进程所在的处理。操作系统过的调度是操作系统负责的，不同的操作系统可能会不一样，但是对于我们程序编写者来说，不用关心，因为对我们都是透明的。</p>
-<p>一个进程在启动的时候，会创建一个主线程，这个主线程结束的时候，程序进程也就终止了，所以一个进程至少有一个线程，这也是我们在<code>main</code>函数里，使用goroutine的时候，要让主线程等待的原因，因为主线程结束了，程序就终止了，那么就有可能会看不到goroutine的输出。</p>
-<p>在一个并发指的是将</p>
-<p>go语言中并发指的是让某个函数独立于其他函数运行的能力，一个goroutine就是一个独立的工作单元，Go的runtime（运行时）会在<strong>逻辑处理器</strong>上调度这些goroutine来运行，一个<strong>逻辑处理器</strong>绑定一个操作系统线程，所以说goroutine不是线程，它是一个协程，也是这个原因，它是由Go语言运行时本身的算法实现的。</p>
-<p>这里我们总结下几个概念：</p>
-<table>
-<thead>
-<tr class="header">
-<th style="text-align: left;">概念</th>
-<th style="text-align: left;">说明</th>
-</tr>
-</thead>
-<tbody>
-<tr class="odd">
-<td style="text-align: left;">进程</td>
-<td style="text-align: left;">一个程序对应一个独立程序空间</td>
-</tr>
-<tr class="even">
-<td style="text-align: left;">线程</td>
-<td style="text-align: left;">一个执行空间，一个进程可以有多个线程</td>
-</tr>
-<tr class="odd">
-<td style="text-align: left;">逻辑处理器</td>
-<td style="text-align: left;">执行创建的goroutine，绑定一个线程</td>
-</tr>
-<tr class="even">
-<td style="text-align: left;">调度器</td>
-<td style="text-align: left;">Go运行时中的，分配goroutine给不同的逻辑处理器</td>
-</tr>
-<tr class="odd">
-<td style="text-align: left;">全局运行队列</td>
-<td style="text-align: left;">所有刚创建的goroutine都会放到这里</td>
-</tr>
-<tr class="even">
-<td style="text-align: left;">本地运行队列</td>
-<td style="text-align: left;">逻辑处理器的goroutine队列</td>
-</tr>
-</tbody>
-</table>
-<p>当我们创建一个goroutine的后，会先存放在<code>全局运行队列</code>中，等待Go运行时的<code>调度器</code>进行调度，把他们分配给其中的一个<code>逻辑处理器</code>，并放到这个逻辑处理器对应的<code>本地运行队列</code>中，最终等着被<code>逻辑处理器</code>执行即可。</p>
-<p>这一套管理、调度、执行goroutine的方式称之为Go的并发。并发可以同时做很多事情，比如有个goroutine执行了一半，就被暂停执行其他goroutine去了，这是Go控制管理的。所以并发的概念和并行不一样，并行指的是在不同的物理处理器上同时执行不同的代码片段，<strong>并行可以同时做很多事情，而并发是同时管理很多事情</strong>，因为操作系统和硬件的总资源比较少，所以并发的效果要比并行好的多，使用较少的资源做更多的事情，也是Go语言提倡的。</p>
-<p>Go的并发原理我们刚刚讲了，那么Go的并行是怎样的呢？其实答案非常简单，多创建一个<code>逻辑处理器</code>就好了，这样调度器就可以同时分配<code>全局运行队列</code>中的goroutine到不同的<code>逻辑处理器</code>上并行执行。</p>
-<p>基于上述对goroutine调度的了解，分析为上述解法会报错：第一个执行周期，goroutine A打印“goroutine a: 0”之后，A和B都处于阻塞状态；这时A向channel中写值，A和B都解除阻塞状态；此时，期望的结果是调度器执行B，打印“goroutine b: 1”，然而调度器的行为不可知，在下一个执行周期可能会执行A，在continue之后打印“goroutine a: 2”，如下图：</p>
-<p><img src="/images/goroutine-错误方法.png" /></p>
-<p>正确的channel阻塞方案如下：</p>
-<figure class="highlight go"><table><tr><td class="code"><pre><code class="hljs go"><span class="hljs-function"><span class="hljs-keyword">func</span> <span class="hljs-title">main</span><span class="hljs-params">()</span></span> &#123;<br><br>	wg := sync.WaitGroup&#123;&#125;<br><br>	wg.Add(<span class="hljs-number">2</span>)<br><br>	channel := <span class="hljs-built_in">make</span>(<span class="hljs-keyword">chan</span> <span class="hljs-keyword">struct</span>&#123;&#125;)<br><br>	<span class="hljs-keyword">go</span> <span class="hljs-function"><span class="hljs-keyword">func</span><span class="hljs-params">()</span></span> &#123;<br>		<span class="hljs-keyword">defer</span> wg.Done()<br>		<span class="hljs-keyword">for</span> i := <span class="hljs-number">0</span>; i &lt;= <span class="hljs-number">100</span>; i++ &#123;<br>			channel &lt;- <span class="hljs-keyword">struct</span>&#123;&#125;&#123;&#125;<br>			<span class="hljs-keyword">if</span> i%<span class="hljs-number">2</span> != <span class="hljs-number">0</span> &#123;<br>				<span class="hljs-keyword">continue</span><br>			&#125;<br>			fmt.Printf(<span class="hljs-string">&quot;goroutine a: %d\n&quot;</span>, i)<br>		&#125;<br>	&#125;()<br><br>	<span class="hljs-keyword">go</span> <span class="hljs-function"><span class="hljs-keyword">func</span><span class="hljs-params">()</span></span> &#123;<br>		<span class="hljs-keyword">defer</span> wg.Done()<br>		<span class="hljs-keyword">for</span> i := <span class="hljs-number">0</span>; i &lt;= <span class="hljs-number">100</span>; i++ &#123;<br>			&lt;-channel<br>			<span class="hljs-keyword">if</span> i%<span class="hljs-number">2</span> == <span class="hljs-number">0</span> &#123;<br>				<span class="hljs-keyword">continue</span><br>			&#125;<br>			fmt.Printf(<span class="hljs-string">&quot;goroutine b: %d\n&quot;</span>, i)<br>		&#125;<br>	&#125;()<br><br>	wg.Wait()<br>&#125;<br><br></code></pre></td></tr></table></figure>
-<p>这种方案两个go routine刚进入循环的时候都会被阻塞，然后每个loop周期轮流bypass和打印，如下图：</p>
-<p><img src="/images/goroutine-正确方法.png" /></p>
-<h2 id="参考资料">参考资料</h2>
-<p>https://www.flysnow.org/2017/04/11/go-in-action-go-goroutine.html</p>
-<p>Golang 调度器 GMP 原理与调度全分析：https://learnku.com/articles/41728</p>
+<p>我们想象一个非常简单的场景：</p>
+<p>有一个协程在异步地接收数据，剩下的多个协程必须等待这个协程接收完数据，才能读取到正确的数据。在这种情况下，如果单纯使用 chan 或互斥锁，那么只能有一个协程可以等待，并读取到数据，没办法通知其他的协程也读取数据。</p>
+<p>这个时候，就需要有个全局的变量来标志第一个协程数据是否接受完毕，剩下的协程，反复检查该变量的值，直到满足要求。或者创建多个 channel，每个协程阻塞在一个 channel 上，由接收数据的协程在数据接收完毕后，逐个通知。总之，需要额外的复杂度来完成这件事。</p>
+<p>Go 语言在标准库 sync 中内置一个 <code>sync.Cond</code> 用来解决这类问题。</p>
+<h2 id="sync.cond-的四个方法">2 sync.Cond 的四个方法</h2>
+<p>sync.Cond 的定义如下：</p>
+<figure class="highlight gauss"><table><tr><td class="code"><pre><code class="hljs gauss"><span class="hljs-comment">// Each Cond has an associated Locker L (often a *Mutex or *RWMutex),</span><br><span class="hljs-comment">// which must be held when changing the condition and</span><br><span class="hljs-comment">// when calling the Wait method.</span><br><span class="hljs-comment">//</span><br><span class="hljs-comment">// A Cond must not be copied after first use.</span><br><span class="hljs-built_in">type</span> <span class="hljs-built_in">Cond</span> <span class="hljs-keyword">struct</span> &#123;<br>        noCopy noCopy<br><br>        <span class="hljs-comment">// L is held while observing or changing the condition</span><br>        L Locker<br><br>        notify  notifyList<br>        checker copyChecker<br>&#125;<br></code></pre></td></tr></table></figure>
+<p>每个 Cond 实例都会关联一个锁 L（互斥锁 <em>Mutex，或读写锁 </em>RWMutex），当修改条件或者调用 Wait 方法时，必须加锁。</p>
+<p>和 sync.Cond 相关的有如下几个方法：</p>
+<h3 id="newcond-创建实例">2.1 NewCond 创建实例</h3>
+<figure class="highlight swift"><table><tr><td class="code"><pre><code class="hljs swift"><span class="hljs-function"><span class="hljs-keyword">func</span> <span class="hljs-title">NewCond</span>(l <span class="hljs-type">Locker</span>)</span> <span class="hljs-operator">*</span><span class="hljs-type">Cond</span><br></code></pre></td></tr></table></figure>
+<p>NewCond 创建 Cond 实例时，需要关联一个锁。</p>
+<h3 id="broadcast-广播唤醒所有">2.2 Broadcast 广播唤醒所有</h3>
+<figure class="highlight go"><table><tr><td class="code"><pre><code class="hljs go"><span class="hljs-comment">// Broadcast wakes all goroutines waiting on c.</span><br><span class="hljs-comment">//</span><br><span class="hljs-comment">// It is allowed but not required for the caller to hold c.L</span><br><span class="hljs-comment">// during the call.</span><br><span class="hljs-function"><span class="hljs-keyword">func</span> <span class="hljs-params">(c *Cond)</span> <span class="hljs-title">Broadcast</span><span class="hljs-params">()</span></span><br></code></pre></td></tr></table></figure>
+<p>Broadcast 唤醒所有等待条件变量 c 的 goroutine，无需锁保护。</p>
+<h3 id="signal-唤醒一个协程">2.3 Signal 唤醒一个协程</h3>
+<figure class="highlight go"><table><tr><td class="code"><pre><code class="hljs go"><span class="hljs-comment">// Signal wakes one goroutine waiting on c, if there is any.</span><br><span class="hljs-comment">//</span><br><span class="hljs-comment">// It is allowed but not required for the caller to hold c.L</span><br><span class="hljs-comment">// during the call.</span><br><span class="hljs-function"><span class="hljs-keyword">func</span> <span class="hljs-params">(c *Cond)</span> <span class="hljs-title">Signal</span><span class="hljs-params">()</span></span><br></code></pre></td></tr></table></figure>
+<p>Signal 只唤醒任意 1 个等待条件变量 c 的 goroutine，无需锁保护。</p>
+<h3 id="wait-等待">2.4 Wait 等待</h3>
+<figure class="highlight awk"><table><tr><td class="code"><pre><code class="hljs awk"><span class="hljs-regexp">//</span> Wait atomically unlocks c.L and suspends execution<br><span class="hljs-regexp">//</span> of the calling goroutine. After later resuming execution,<br><span class="hljs-regexp">//</span> Wait locks c.L before returning. Unlike <span class="hljs-keyword">in</span> other systems,<br><span class="hljs-regexp">//</span> Wait cannot return unless awoken by Broadcast or Signal.<br><span class="hljs-regexp">//</span><br><span class="hljs-regexp">//</span> Because c.L is not locked when Wait first resumes, the caller<br><span class="hljs-regexp">//</span> typically cannot assume that the condition is true when<br><span class="hljs-regexp">//</span> Wait returns. Instead, the caller should Wait <span class="hljs-keyword">in</span> a loop:<br><span class="hljs-regexp">//</span><br><span class="hljs-regexp">//</span>    c.L.Lock()<br><span class="hljs-regexp">//</span>    <span class="hljs-keyword">for</span> !condition() &#123;<br><span class="hljs-regexp">//</span>        c.Wait()<br><span class="hljs-regexp">//</span>    &#125;<br><span class="hljs-regexp">//</span>    ... make use of condition ...<br><span class="hljs-regexp">//</span>    c.L.Unlock()<br><span class="hljs-regexp">//</span><br><span class="hljs-keyword">func</span> (c *Cond) Wait()<br></code></pre></td></tr></table></figure>
+<p>调用 Wait 会自动释放锁 c.L，并挂起调用者所在的 goroutine，因此当前协程会阻塞在 Wait 方法调用的地方。如果其他协程调用了 Signal 或 Broadcast 唤醒了该协程，那么 Wait 方法在结束阻塞时，会重新给 c.L 加锁，并且继续执行 Wait 后面的代码。</p>
+<p>对条件的检查，使用了 <code>for !condition()</code> 而非 <code>if</code>，是因为当前协程被唤醒时，条件不一定符合要求，需要再次 Wait 等待下次被唤醒。为了保险起见，使用 <code>for</code> 能够确保条件符合要求后，再执行后续的代码。</p>
+<figure class="highlight stylus"><table><tr><td class="code"><pre><code class="hljs stylus">c<span class="hljs-selector-class">.L</span><span class="hljs-selector-class">.Lock</span>()<br><span class="hljs-keyword">for</span> !condition() &#123;<br>    c<span class="hljs-selector-class">.Wait</span>()<br>&#125;<br>... make use of condition ...<br>c<span class="hljs-selector-class">.L</span><span class="hljs-selector-class">.Unlock</span>()<br></code></pre></td></tr></table></figure>
+<h2 id="使用示例">3 使用示例</h2>
+<p>接下来我们实现一个简单的例子，三个协程调用 <code>Wait()</code> 等待，另一个协程调用 <code>Broadcast()</code> 唤醒所有等待的协程。</p>
+<figure class="highlight pgsql"><table><tr><td class="code"><pre><code class="hljs pgsql">var done = <span class="hljs-keyword">false</span><br><br>func <span class="hljs-keyword">read</span>(<span class="hljs-type">name</span> string, c *sync.Cond) &#123;<br>	c.L.<span class="hljs-keyword">Lock</span>()<br>	<span class="hljs-keyword">for</span> !done &#123;<br>		c.Wait()<br>	&#125;<br>	<span class="hljs-keyword">log</span>.Println(<span class="hljs-type">name</span>, &quot;starts reading&quot;)<br>	c.L.Unlock()<br>&#125;<br><br>func <span class="hljs-keyword">write</span>(<span class="hljs-type">name</span> string, c *sync.Cond) &#123;<br>	<span class="hljs-keyword">log</span>.Println(<span class="hljs-type">name</span>, &quot;starts writing&quot;)<br>	<span class="hljs-type">time</span>.Sleep(<span class="hljs-type">time</span>.Second)<br>	c.L.<span class="hljs-keyword">Lock</span>()<br>	done = <span class="hljs-keyword">true</span><br>	c.L.Unlock()<br>	<span class="hljs-keyword">log</span>.Println(<span class="hljs-type">name</span>, &quot;wakes all&quot;)<br>	c.Broadcast()<br>&#125;<br><br>func main() &#123;<br>	cond := sync.NewCond(&amp;sync.Mutex&#123;&#125;)<br><br>	go <span class="hljs-keyword">read</span>(&quot;reader1&quot;, cond)<br>	go <span class="hljs-keyword">read</span>(&quot;reader2&quot;, cond)<br>	go <span class="hljs-keyword">read</span>(&quot;reader3&quot;, cond)<br>	<span class="hljs-keyword">write</span>(&quot;writer&quot;, cond)<br><br>	<span class="hljs-type">time</span>.Sleep(<span class="hljs-type">time</span>.Second * <span class="hljs-number">3</span>)<br>&#125;<br></code></pre></td></tr></table></figure>
+<ul>
+<li><code>done</code> 即互斥锁需要保护的条件变量。</li>
+<li><code>read()</code> 调用 <code>Wait()</code> 等待通知，直到 done 为 true。</li>
+<li><code>write()</code> 接收数据，接收完成后，将 done 置为 true，调用 <code>Broadcast()</code> 通知所有等待的协程。</li>
+<li><code>write()</code> 中的暂停了 1s，一方面是模拟耗时，另一方面是确保前面的 3 个 read 协程都执行到 <code>Wait()</code>，处于等待状态。main 函数最后暂停了 3s，确保所有操作执行完毕。</li>
+</ul>
+<p>运行结果如下：</p>
+<figure class="highlight awk"><table><tr><td class="code"><pre><code class="hljs awk">$ go run main.go<br><span class="hljs-number">2021</span><span class="hljs-regexp">/01/</span><span class="hljs-number">14</span> <span class="hljs-number">23</span>:<span class="hljs-number">18</span>:<span class="hljs-number">20</span> writer starts writing<br><span class="hljs-number">2021</span><span class="hljs-regexp">/01/</span><span class="hljs-number">14</span> <span class="hljs-number">23</span>:<span class="hljs-number">18</span>:<span class="hljs-number">21</span> writer wakes all<br><span class="hljs-number">2021</span><span class="hljs-regexp">/01/</span><span class="hljs-number">14</span> <span class="hljs-number">23</span>:<span class="hljs-number">18</span>:<span class="hljs-number">21</span> reader2 starts reading<br><span class="hljs-number">2021</span><span class="hljs-regexp">/01/</span><span class="hljs-number">14</span> <span class="hljs-number">23</span>:<span class="hljs-number">18</span>:<span class="hljs-number">21</span> reader3 starts reading<br><span class="hljs-number">2021</span><span class="hljs-regexp">/01/</span><span class="hljs-number">14</span> <span class="hljs-number">23</span>:<span class="hljs-number">18</span>:<span class="hljs-number">21</span> reader1 starts reading<br></code></pre></td></tr></table></figure>
+<p>writer 接收数据花费了 1s，同步通知所有等待的协程。</p>
+<h2 id="参考资料">4 参考资料</h2>
+<p>https://geektutu.com/post/hpg-sync-cond.html</p>
 ]]></content>
       <categories>
         <category>专业</category>
@@ -531,7 +617,7 @@
       </categories>
       <tags>
         <tag>golang</tag>
-        <tag>算法</tag>
+        <tag>sync</tag>
       </tags>
   </entry>
   <entry>

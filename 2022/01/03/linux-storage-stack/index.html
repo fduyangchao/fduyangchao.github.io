@@ -18,7 +18,7 @@
   <meta name="keywords" content="">
   <meta name="description" content="开发者在开发基于Linux平台的程序时，经常做文件的读写操作。大家平时用的各种语言，比如C&#x2F;C++, Java, Go等，都对这些操作都做了高层次的封装，把很多细节都屏蔽了。为了深入了解应用程序对磁盘上的文件进行读写时，从上到下经历了哪些事情，需要剖开 Linux 的内部来看 Linux 的 IO 栈。">
 <meta property="og:type" content="article">
-<meta property="og:title" content="Linux I&#x2F;O 存储栈">
+<meta property="og:title" content="Linux存储系列之一: I&#x2F;O Stack">
 <meta property="og:url" content="https://fduyangcaho.github.io/2022/01/03/linux-storage-stack/index.html">
 <meta property="og:site_name" content="Chao&#39;s Blog">
 <meta property="og:description" content="开发者在开发基于Linux平台的程序时，经常做文件的读写操作。大家平时用的各种语言，比如C&#x2F;C++, Java, Go等，都对这些操作都做了高层次的封装，把很多细节都屏蔽了。为了深入了解应用程序对磁盘上的文件进行读写时，从上到下经历了哪些事情，需要剖开 Linux 的内部来看 Linux 的 IO 栈。">
@@ -27,14 +27,14 @@
 <meta property="og:image" content="https://cdn.jsdelivr.net/gh/simonyangchao/resources@image/linux-io-stack-ilinux.jpg">
 <meta property="og:image" content="https://cdn.jsdelivr.net/gh/simonyangchao/resources@image/linux-io-stack-2.jpeg">
 <meta property="article:published_time" content="2022-01-03T10:07:59.000Z">
-<meta property="article:modified_time" content="2022-01-03T15:16:05.070Z">
+<meta property="article:modified_time" content="2022-01-05T15:56:48.799Z">
 <meta property="article:author" content="Chao">
 <meta property="article:tag" content="storage">
 <meta property="article:tag" content="Linux">
 <meta name="twitter:card" content="summary_large_image">
 <meta name="twitter:image" content="https://cdn.jsdelivr.net/gh/simonyangchao/resources@image/Linux-storage-stack-diagram_v4.10.png">
   
-  <title>Linux I/O 存储栈 - Chao&#39;s Blog</title>
+  <title>Linux存储系列之一: I/O Stack - Chao&#39;s Blog</title>
 
   <link  rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap@4/dist/css/bootstrap.min.css" />
 
@@ -181,7 +181,7 @@
       <div class="full-bg-img">
         <div class="mask flex-center" style="background-color: rgba(0, 0, 0, 0.3)">
           <div class="page-header text-center fade-in-up">
-            <span class="h2" id="subtitle" title="Linux I/O 存储栈">
+            <span class="h2" id="subtitle" title="Linux存储系列之一: I/O Stack">
               
             </span>
 
@@ -202,7 +202,7 @@
   
     <span class="post-meta mr-2">
       <i class="iconfont icon-chart"></i>
-      711 字
+      1k 字
     </span>
   
 
@@ -211,7 +211,7 @@
       <i class="iconfont icon-clock-fill"></i>
       
       
-      2 分钟
+      3 分钟
     </span>
   
 
@@ -240,11 +240,11 @@
         <div class="py-5" id="board">
           <article class="post-content mx-auto">
             <!-- SEO header -->
-            <h1 style="display: none">Linux I/O 存储栈</h1>
+            <h1 style="display: none">Linux存储系列之一: I/O Stack</h1>
             
               <p class="note note-info">
                 
-                  本文最后更新于：2022年1月3日 晚上
+                  本文最后更新于：2022年1月5日 晚上
                 
               </p>
             
@@ -288,7 +288,10 @@
 <li>https://zhuanlan.zhihu.com/p/371574406</li>
 <li>https://zhuanlan.zhihu.com/p/441679741</li>
 <li>http://www.ilinuxkernel.com/files/Linux.IO.stack_v1.0.pdf</li>
+<li>https://segmentfault.com/a/1190000020990855</li>
 </ol>
+<h1 id="宋宝华-文件读写bio波澜壮阔的一生">宋宝华： 文件读写（BIO）波澜壮阔的一生</h1>
+<p>https://mp.weixin.qq.com/s?__biz=MzAwMDUwNDgxOA==&amp;mid=2652664116&amp;idx=1&amp;sn=7e08954c97f4fda1ee8c125ec0813a45&amp;chksm=810f37a9b678bebf5d3385855254a12f1e9373bbfd3818605a7a995bac9d3bb94b062dd8574d&amp;scene=21#wechat_redirect</p>
 
             </div>
             <hr>
@@ -330,6 +333,12 @@
                 <div class="post-prevnext">
                   <article class="post-prev col-6">
                     
+                    
+                      <a href="/2022/02/24/golang-sync-cond-1/">
+                        <i class="iconfont icon-arrowleft"></i>
+                        <span class="hidden-mobile">Go sync.Cond（一）：使用方法</span>
+                        <span class="visible-mobile">上一篇</span>
+                      </a>
                     
                   </article>
                   <article class="post-next col-6">

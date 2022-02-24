@@ -1,0 +1,504 @@
+
+
+<!DOCTYPE html>
+<html lang="zh-CN" data-default-color-scheme=auto>
+
+
+
+<head>
+  <meta charset="UTF-8">
+  <link rel="apple-touch-icon" sizes="76x76" href="/img/favicon.png">
+  <link rel="icon" href="/img/favicon.png">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=5.0, shrink-to-fit=no">
+  <meta http-equiv="x-ua-compatible" content="ie=edge">
+  
+  <meta name="theme-color" content="#2f4154">
+  <meta name="description" content="1 sync.Cond 的使用场景
+
+一句话总结：sync.Cond 条件变量用来协调想要访问共享资源的那些 goroutine，当共享资源的状态发生变化的时候，它可以用来通知被互斥锁阻塞的 goroutine。
+
+sync.Cond 基于互斥锁/读写锁，它和互斥锁的区别是什么呢？
+互斥锁 sync.Mutex 通常用来保护临界区和共享资源，条件变量 sync.Cond 用来协调想要访问共享资源的">
+  <meta name="author" content="Chao">
+  <meta name="keywords" content="">
+  <meta name="description" content="1 sync.Cond 的使用场景  一句话总结：sync.Cond 条件变量用来协调想要访问共享资源的那些 goroutine，当共享资源的状态发生变化的时候，它可以用来通知被互斥锁阻塞的 goroutine。  sync.Cond 基于互斥锁&#x2F;读写锁，它和互斥锁的区别是什么呢？ 互斥锁 sync.Mutex 通常用来保护临界区和共享资源，条件变量 sync.Cond 用来协调想要访问共享资源的">
+<meta property="og:type" content="article">
+<meta property="og:title" content="Go sync.Cond（一）：使用方法">
+<meta property="og:url" content="https://fduyangcaho.github.io/2022/02/24/golang-sync-cond-1/index.html">
+<meta property="og:site_name" content="Chao&#39;s Blog">
+<meta property="og:description" content="1 sync.Cond 的使用场景  一句话总结：sync.Cond 条件变量用来协调想要访问共享资源的那些 goroutine，当共享资源的状态发生变化的时候，它可以用来通知被互斥锁阻塞的 goroutine。  sync.Cond 基于互斥锁&#x2F;读写锁，它和互斥锁的区别是什么呢？ 互斥锁 sync.Mutex 通常用来保护临界区和共享资源，条件变量 sync.Cond 用来协调想要访问共享资源的">
+<meta property="og:locale" content="zh_CN">
+<meta property="article:published_time" content="2022-02-24T09:26:55.000Z">
+<meta property="article:modified_time" content="2022-02-24T09:31:35.743Z">
+<meta property="article:author" content="Chao">
+<meta property="article:tag" content="golang">
+<meta property="article:tag" content="sync">
+<meta name="twitter:card" content="summary_large_image">
+  
+  <title>Go sync.Cond（一）：使用方法 - Chao&#39;s Blog</title>
+
+  <link  rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap@4/dist/css/bootstrap.min.css" />
+
+
+  <link  rel="stylesheet" href="https://cdn.jsdelivr.net/npm/github-markdown-css@4/github-markdown.min.css" />
+  <link  rel="stylesheet" href="/lib/hint/hint.min.css" />
+
+  
+    
+    
+      
+      <link  rel="stylesheet" href="https://cdn.jsdelivr.net/npm/highlight.js@10/styles/github-gist.min.css" />
+    
+  
+
+  
+    <link  rel="stylesheet" href="https://cdn.jsdelivr.net/npm/@fancyapps/fancybox@3/dist/jquery.fancybox.min.css" />
+  
+
+
+<!-- 主题依赖的图标库，不要自行修改 -->
+
+<link rel="stylesheet" href="//at.alicdn.com/t/font_1749284_ba1fz6golrf.css">
+
+
+
+<link rel="stylesheet" href="//at.alicdn.com/t/font_1736178_kmeydafke9r.css">
+
+
+<link  rel="stylesheet" href="/css/main.css" />
+
+<!-- 自定义样式保持在最底部 -->
+
+
+  <script id="fluid-configs">
+    var Fluid = window.Fluid || {};
+    var CONFIG = {"hostname":"fduyangcaho.github.io","root":"/","version":"1.8.12","typing":{"enable":true,"typeSpeed":70,"cursorChar":"_","loop":false},"anchorjs":{"enable":true,"element":"h1,h2,h3,h4,h5,h6","placement":"right","visible":"hover","icon":""},"progressbar":{"enable":true,"height_px":3,"color":"#29d","options":{"showSpinner":false,"trickleSpeed":100}},"copy_btn":true,"image_zoom":{"enable":true,"img_url_replace":["",""]},"toc":{"enable":true,"headingSelector":"h1,h2,h3,h4,h5,h6","collapseDepth":0},"lazyload":{"enable":true,"loading_img":"/img/loading.gif","onlypost":false,"offset_factor":2},"web_analytics":{"enable":false,"baidu":null,"google":null,"gtag":null,"tencent":{"sid":null,"cid":null},"woyaola":null,"cnzz":null,"leancloud":{"app_id":null,"app_key":null,"server_url":null,"path":"window.location.pathname"}},"search_path":"/local-search.xml"};
+  </script>
+  <script  src="/js/utils.js" ></script>
+  <script  src="/js/color-schema.js" ></script>
+<meta name="generator" content="Hexo 5.4.0"><link rel="alternate" href="/atom.xml" title="Chao's Blog" type="application/atom+xml">
+</head>
+
+
+<body>
+  <header style="height: 70vh;">
+    <nav id="navbar" class="navbar fixed-top  navbar-expand-lg navbar-dark scrolling-navbar">
+  <div class="container">
+    <a class="navbar-brand" href="/">
+      <strong>Simon&#39;s Blog</strong>
+    </a>
+
+    <button id="navbar-toggler-btn" class="navbar-toggler" type="button" data-toggle="collapse"
+            data-target="#navbarSupportedContent"
+            aria-controls="navbarSupportedContent" aria-expanded="false" aria-label="Toggle navigation">
+      <div class="animated-icon"><span></span><span></span><span></span></div>
+    </button>
+
+    <!-- Collapsible content -->
+    <div class="collapse navbar-collapse" id="navbarSupportedContent">
+      <ul class="navbar-nav ml-auto text-center">
+        
+          
+          
+          
+          
+            <li class="nav-item">
+              <a class="nav-link" href="/">
+                <i class="iconfont icon-home-fill"></i>
+                首页
+              </a>
+            </li>
+          
+        
+          
+          
+          
+          
+            <li class="nav-item">
+              <a class="nav-link" href="/archives/">
+                <i class="iconfont icon-archive-fill"></i>
+                归档
+              </a>
+            </li>
+          
+        
+          
+          
+          
+          
+            <li class="nav-item">
+              <a class="nav-link" href="/categories/">
+                <i class="iconfont icon-category-fill"></i>
+                分类
+              </a>
+            </li>
+          
+        
+          
+          
+          
+          
+            <li class="nav-item">
+              <a class="nav-link" href="/tags/">
+                <i class="iconfont icon-tags-fill"></i>
+                标签
+              </a>
+            </li>
+          
+        
+          
+          
+          
+          
+            <li class="nav-item">
+              <a class="nav-link" href="/about/">
+                <i class="iconfont icon-user-fill"></i>
+                关于
+              </a>
+            </li>
+          
+        
+        
+          <li class="nav-item" id="search-btn">
+            <a class="nav-link" target="_self" href="javascript:;" data-toggle="modal" data-target="#modalSearch" aria-label="Search">
+              &nbsp;<i class="iconfont icon-search"></i>&nbsp;
+            </a>
+          </li>
+        
+        
+          <li class="nav-item" id="color-toggle-btn">
+            <a class="nav-link" target="_self" href="javascript:;" aria-label="Color Toggle">&nbsp;<i
+                class="iconfont icon-dark" id="color-toggle-icon"></i>&nbsp;</a>
+          </li>
+        
+      </ul>
+    </div>
+  </div>
+</nav>
+
+    <div class="banner" id="banner" parallax=true
+         style="background: url('https://cdn.jsdelivr.net/gh/simonyangchao/resources@image/golang-1.png') no-repeat center center;
+           background-size: cover;">
+      <div class="full-bg-img">
+        <div class="mask flex-center" style="background-color: rgba(0, 0, 0, 0.3)">
+          <div class="page-header text-center fade-in-up">
+            <span class="h2" id="subtitle" title="Go sync.Cond（一）：使用方法">
+              
+            </span>
+
+            
+              <div class="mt-3">
+  
+  
+    <span class="post-meta">
+      <i class="iconfont icon-date-fill" aria-hidden="true"></i>
+      <time datetime="2022-02-24 17:26" pubdate>
+        2022年2月24日 下午
+      </time>
+    </span>
+  
+</div>
+
+<div class="mt-1">
+  
+    <span class="post-meta mr-2">
+      <i class="iconfont icon-chart"></i>
+      3.4k 字
+    </span>
+  
+
+  
+    <span class="post-meta mr-2">
+      <i class="iconfont icon-clock-fill"></i>
+      
+      
+      11 分钟
+    </span>
+  
+
+  
+  
+</div>
+
+            
+          </div>
+
+          
+        </div>
+      </div>
+    </div>
+  </header>
+
+  <main>
+    
+      
+
+<div class="container-fluid nopadding-x">
+  <div class="row nomargin-x">
+    <div class="d-none d-lg-block col-lg-2"></div>
+    <div class="col-lg-8 nopadding-x-md">
+      <div class="container nopadding-x-md" id="board-ctn">
+        <div class="py-5" id="board">
+          <article class="post-content mx-auto">
+            <!-- SEO header -->
+            <h1 style="display: none">Go sync.Cond（一）：使用方法</h1>
+            
+              <p class="note note-info">
+                
+                  本文最后更新于：2022年2月24日 下午
+                
+              </p>
+            
+            <div class="markdown-body">
+              <h2 id="sync.cond-的使用场景">1 sync.Cond 的使用场景</h2>
+<blockquote>
+<p>一句话总结：<code>sync.Cond</code> 条件变量用来协调想要访问共享资源的那些 goroutine，当共享资源的状态发生变化的时候，它可以用来通知被互斥锁阻塞的 goroutine。</p>
+</blockquote>
+<p><code>sync.Cond</code> 基于互斥锁/读写锁，它和互斥锁的区别是什么呢？</p>
+<p>互斥锁 <code>sync.Mutex</code> 通常用来保护临界区和共享资源，条件变量 <code>sync.Cond</code> 用来协调想要访问共享资源的 goroutine。</p>
+<p><code>sync.Cond</code> 经常用在多个 goroutine 等待，一个 goroutine 通知（事件发生）的场景。如果是一个通知，一个等待，使用互斥锁或 channel 就能搞定了。</p>
+<span id="more"></span>
+<p>我们想象一个非常简单的场景：</p>
+<p>有一个协程在异步地接收数据，剩下的多个协程必须等待这个协程接收完数据，才能读取到正确的数据。在这种情况下，如果单纯使用 chan 或互斥锁，那么只能有一个协程可以等待，并读取到数据，没办法通知其他的协程也读取数据。</p>
+<p>这个时候，就需要有个全局的变量来标志第一个协程数据是否接受完毕，剩下的协程，反复检查该变量的值，直到满足要求。或者创建多个 channel，每个协程阻塞在一个 channel 上，由接收数据的协程在数据接收完毕后，逐个通知。总之，需要额外的复杂度来完成这件事。</p>
+<p>Go 语言在标准库 sync 中内置一个 <code>sync.Cond</code> 用来解决这类问题。</p>
+<h2 id="sync.cond-的四个方法">2 sync.Cond 的四个方法</h2>
+<p>sync.Cond 的定义如下：</p>
+<figure class="highlight gauss"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br><span class="line">7</span><br><span class="line">8</span><br><span class="line">9</span><br><span class="line">10</span><br><span class="line">11</span><br><span class="line">12</span><br><span class="line">13</span><br><span class="line">14</span><br></pre></td><td class="code"><pre><code class="hljs gauss"><span class="hljs-comment">// Each Cond has an associated Locker L (often a *Mutex or *RWMutex),</span><br><span class="hljs-comment">// which must be held when changing the condition and</span><br><span class="hljs-comment">// when calling the Wait method.</span><br><span class="hljs-comment">//</span><br><span class="hljs-comment">// A Cond must not be copied after first use.</span><br><span class="hljs-built_in">type</span> <span class="hljs-built_in">Cond</span> <span class="hljs-keyword">struct</span> &#123;<br>        noCopy noCopy<br><br>        <span class="hljs-comment">// L is held while observing or changing the condition</span><br>        L Locker<br><br>        notify  notifyList<br>        checker copyChecker<br>&#125;<br></code></pre></td></tr></table></figure>
+<p>每个 Cond 实例都会关联一个锁 L（互斥锁 <em>Mutex，或读写锁 </em>RWMutex），当修改条件或者调用 Wait 方法时，必须加锁。</p>
+<p>和 sync.Cond 相关的有如下几个方法：</p>
+<h3 id="newcond-创建实例">2.1 NewCond 创建实例</h3>
+<figure class="highlight swift"><table><tr><td class="gutter"><pre><span class="line">1</span><br></pre></td><td class="code"><pre><code class="hljs swift"><span class="hljs-function"><span class="hljs-keyword">func</span> <span class="hljs-title">NewCond</span>(l <span class="hljs-type">Locker</span>)</span> <span class="hljs-operator">*</span><span class="hljs-type">Cond</span><br></code></pre></td></tr></table></figure>
+<p>NewCond 创建 Cond 实例时，需要关联一个锁。</p>
+<h3 id="broadcast-广播唤醒所有">2.2 Broadcast 广播唤醒所有</h3>
+<figure class="highlight go"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br></pre></td><td class="code"><pre><code class="hljs go"><span class="hljs-comment">// Broadcast wakes all goroutines waiting on c.</span><br><span class="hljs-comment">//</span><br><span class="hljs-comment">// It is allowed but not required for the caller to hold c.L</span><br><span class="hljs-comment">// during the call.</span><br><span class="hljs-function"><span class="hljs-keyword">func</span> <span class="hljs-params">(c *Cond)</span> <span class="hljs-title">Broadcast</span><span class="hljs-params">()</span></span><br></code></pre></td></tr></table></figure>
+<p>Broadcast 唤醒所有等待条件变量 c 的 goroutine，无需锁保护。</p>
+<h3 id="signal-唤醒一个协程">2.3 Signal 唤醒一个协程</h3>
+<figure class="highlight go"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br></pre></td><td class="code"><pre><code class="hljs go"><span class="hljs-comment">// Signal wakes one goroutine waiting on c, if there is any.</span><br><span class="hljs-comment">//</span><br><span class="hljs-comment">// It is allowed but not required for the caller to hold c.L</span><br><span class="hljs-comment">// during the call.</span><br><span class="hljs-function"><span class="hljs-keyword">func</span> <span class="hljs-params">(c *Cond)</span> <span class="hljs-title">Signal</span><span class="hljs-params">()</span></span><br></code></pre></td></tr></table></figure>
+<p>Signal 只唤醒任意 1 个等待条件变量 c 的 goroutine，无需锁保护。</p>
+<h3 id="wait-等待">2.4 Wait 等待</h3>
+<figure class="highlight awk"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br><span class="line">7</span><br><span class="line">8</span><br><span class="line">9</span><br><span class="line">10</span><br><span class="line">11</span><br><span class="line">12</span><br><span class="line">13</span><br><span class="line">14</span><br><span class="line">15</span><br><span class="line">16</span><br><span class="line">17</span><br></pre></td><td class="code"><pre><code class="hljs awk"><span class="hljs-regexp">//</span> Wait atomically unlocks c.L and suspends execution<br><span class="hljs-regexp">//</span> of the calling goroutine. After later resuming execution,<br><span class="hljs-regexp">//</span> Wait locks c.L before returning. Unlike <span class="hljs-keyword">in</span> other systems,<br><span class="hljs-regexp">//</span> Wait cannot return unless awoken by Broadcast or Signal.<br><span class="hljs-regexp">//</span><br><span class="hljs-regexp">//</span> Because c.L is not locked when Wait first resumes, the caller<br><span class="hljs-regexp">//</span> typically cannot assume that the condition is true when<br><span class="hljs-regexp">//</span> Wait returns. Instead, the caller should Wait <span class="hljs-keyword">in</span> a loop:<br><span class="hljs-regexp">//</span><br><span class="hljs-regexp">//</span>    c.L.Lock()<br><span class="hljs-regexp">//</span>    <span class="hljs-keyword">for</span> !condition() &#123;<br><span class="hljs-regexp">//</span>        c.Wait()<br><span class="hljs-regexp">//</span>    &#125;<br><span class="hljs-regexp">//</span>    ... make use of condition ...<br><span class="hljs-regexp">//</span>    c.L.Unlock()<br><span class="hljs-regexp">//</span><br><span class="hljs-keyword">func</span> (c *Cond) Wait()<br></code></pre></td></tr></table></figure>
+<p>调用 Wait 会自动释放锁 c.L，并挂起调用者所在的 goroutine，因此当前协程会阻塞在 Wait 方法调用的地方。如果其他协程调用了 Signal 或 Broadcast 唤醒了该协程，那么 Wait 方法在结束阻塞时，会重新给 c.L 加锁，并且继续执行 Wait 后面的代码。</p>
+<p>对条件的检查，使用了 <code>for !condition()</code> 而非 <code>if</code>，是因为当前协程被唤醒时，条件不一定符合要求，需要再次 Wait 等待下次被唤醒。为了保险起见，使用 <code>for</code> 能够确保条件符合要求后，再执行后续的代码。</p>
+<figure class="highlight stylus"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br></pre></td><td class="code"><pre><code class="hljs stylus">c<span class="hljs-selector-class">.L</span><span class="hljs-selector-class">.Lock</span>()<br><span class="hljs-keyword">for</span> !condition() &#123;<br>    c<span class="hljs-selector-class">.Wait</span>()<br>&#125;<br>... make use of condition ...<br>c<span class="hljs-selector-class">.L</span><span class="hljs-selector-class">.Unlock</span>()<br></code></pre></td></tr></table></figure>
+<h2 id="使用示例">3 使用示例</h2>
+<p>接下来我们实现一个简单的例子，三个协程调用 <code>Wait()</code> 等待，另一个协程调用 <code>Broadcast()</code> 唤醒所有等待的协程。</p>
+<figure class="highlight pgsql"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br><span class="line">7</span><br><span class="line">8</span><br><span class="line">9</span><br><span class="line">10</span><br><span class="line">11</span><br><span class="line">12</span><br><span class="line">13</span><br><span class="line">14</span><br><span class="line">15</span><br><span class="line">16</span><br><span class="line">17</span><br><span class="line">18</span><br><span class="line">19</span><br><span class="line">20</span><br><span class="line">21</span><br><span class="line">22</span><br><span class="line">23</span><br><span class="line">24</span><br><span class="line">25</span><br><span class="line">26</span><br><span class="line">27</span><br><span class="line">28</span><br><span class="line">29</span><br><span class="line">30</span><br><span class="line">31</span><br></pre></td><td class="code"><pre><code class="hljs pgsql">var done = <span class="hljs-keyword">false</span><br><br>func <span class="hljs-keyword">read</span>(<span class="hljs-type">name</span> string, c *sync.Cond) &#123;<br>	c.L.<span class="hljs-keyword">Lock</span>()<br>	<span class="hljs-keyword">for</span> !done &#123;<br>		c.Wait()<br>	&#125;<br>	<span class="hljs-keyword">log</span>.Println(<span class="hljs-type">name</span>, &quot;starts reading&quot;)<br>	c.L.Unlock()<br>&#125;<br><br>func <span class="hljs-keyword">write</span>(<span class="hljs-type">name</span> string, c *sync.Cond) &#123;<br>	<span class="hljs-keyword">log</span>.Println(<span class="hljs-type">name</span>, &quot;starts writing&quot;)<br>	<span class="hljs-type">time</span>.Sleep(<span class="hljs-type">time</span>.Second)<br>	c.L.<span class="hljs-keyword">Lock</span>()<br>	done = <span class="hljs-keyword">true</span><br>	c.L.Unlock()<br>	<span class="hljs-keyword">log</span>.Println(<span class="hljs-type">name</span>, &quot;wakes all&quot;)<br>	c.Broadcast()<br>&#125;<br><br>func main() &#123;<br>	cond := sync.NewCond(&amp;sync.Mutex&#123;&#125;)<br><br>	go <span class="hljs-keyword">read</span>(&quot;reader1&quot;, cond)<br>	go <span class="hljs-keyword">read</span>(&quot;reader2&quot;, cond)<br>	go <span class="hljs-keyword">read</span>(&quot;reader3&quot;, cond)<br>	<span class="hljs-keyword">write</span>(&quot;writer&quot;, cond)<br><br>	<span class="hljs-type">time</span>.Sleep(<span class="hljs-type">time</span>.Second * <span class="hljs-number">3</span>)<br>&#125;<br></code></pre></td></tr></table></figure>
+<ul>
+<li><code>done</code> 即互斥锁需要保护的条件变量。</li>
+<li><code>read()</code> 调用 <code>Wait()</code> 等待通知，直到 done 为 true。</li>
+<li><code>write()</code> 接收数据，接收完成后，将 done 置为 true，调用 <code>Broadcast()</code> 通知所有等待的协程。</li>
+<li><code>write()</code> 中的暂停了 1s，一方面是模拟耗时，另一方面是确保前面的 3 个 read 协程都执行到 <code>Wait()</code>，处于等待状态。main 函数最后暂停了 3s，确保所有操作执行完毕。</li>
+</ul>
+<p>运行结果如下：</p>
+<figure class="highlight awk"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br></pre></td><td class="code"><pre><code class="hljs awk">$ go run main.go<br><span class="hljs-number">2021</span><span class="hljs-regexp">/01/</span><span class="hljs-number">14</span> <span class="hljs-number">23</span>:<span class="hljs-number">18</span>:<span class="hljs-number">20</span> writer starts writing<br><span class="hljs-number">2021</span><span class="hljs-regexp">/01/</span><span class="hljs-number">14</span> <span class="hljs-number">23</span>:<span class="hljs-number">18</span>:<span class="hljs-number">21</span> writer wakes all<br><span class="hljs-number">2021</span><span class="hljs-regexp">/01/</span><span class="hljs-number">14</span> <span class="hljs-number">23</span>:<span class="hljs-number">18</span>:<span class="hljs-number">21</span> reader2 starts reading<br><span class="hljs-number">2021</span><span class="hljs-regexp">/01/</span><span class="hljs-number">14</span> <span class="hljs-number">23</span>:<span class="hljs-number">18</span>:<span class="hljs-number">21</span> reader3 starts reading<br><span class="hljs-number">2021</span><span class="hljs-regexp">/01/</span><span class="hljs-number">14</span> <span class="hljs-number">23</span>:<span class="hljs-number">18</span>:<span class="hljs-number">21</span> reader1 starts reading<br></code></pre></td></tr></table></figure>
+<p>writer 接收数据花费了 1s，同步通知所有等待的协程。</p>
+<h2 id="参考资料">4 参考资料</h2>
+<p>https://geektutu.com/post/hpg-sync-cond.html</p>
+
+            </div>
+            <hr>
+            <div>
+              <div class="post-metas mb-3">
+                
+                  <div class="post-meta mr-3">
+                    <i class="iconfont icon-category"></i>
+                    
+                      <a class="hover-with-bg" href="/categories/%E4%B8%93%E4%B8%9A/">专业</a>
+                    
+                      <a class="hover-with-bg" href="/categories/%E4%B8%93%E4%B8%9A/%E5%BC%80%E5%8F%91/">开发</a>
+                    
+                      <a class="hover-with-bg" href="/categories/%E4%B8%93%E4%B8%9A/%E5%BC%80%E5%8F%91/golang/">golang</a>
+                    
+                  </div>
+                
+                
+                  <div class="post-meta">
+                    <i class="iconfont icon-tags"></i>
+                    
+                      <a class="hover-with-bg" href="/tags/golang/">golang</a>
+                    
+                      <a class="hover-with-bg" href="/tags/sync/">sync</a>
+                    
+                  </div>
+                
+              </div>
+              
+                <p class="note note-warning">
+                  
+                    本博客所有文章除特别声明外，均采用 <a target="_blank" href="https://creativecommons.org/licenses/by-sa/4.0/deed.zh" rel="nofollow noopener noopener">CC BY-SA 4.0 协议</a> ，转载请注明出处！
+                  
+                </p>
+              
+              
+                <div class="post-prevnext">
+                  <article class="post-prev col-6">
+                    
+                    
+                  </article>
+                  <article class="post-next col-6">
+                    
+                    
+                      <a href="/2022/01/03/linux-storage-stack/">
+                        <span class="hidden-mobile">Linux存储系列之一: I/O Stack</span>
+                        <span class="visible-mobile">下一篇</span>
+                        <i class="iconfont icon-arrowright"></i>
+                      </a>
+                    
+                  </article>
+                </div>
+              
+            </div>
+
+            
+          </article>
+        </div>
+      </div>
+    </div>
+    
+      <div class="d-none d-lg-block col-lg-2 toc-container" id="toc-ctn">
+        <div id="toc">
+  <p class="toc-header"><i class="iconfont icon-list"></i>&nbsp;目录</p>
+  <div class="toc-body" id="toc-body"></div>
+</div>
+
+      </div>
+    
+  </div>
+</div>
+
+<!-- Custom -->
+
+
+    
+
+    
+      <a id="scroll-top-button" aria-label="TOP" href="#" role="button">
+        <i class="iconfont icon-arrowup" aria-hidden="true"></i>
+      </a>
+    
+
+    
+      <div class="modal fade" id="modalSearch" tabindex="-1" role="dialog" aria-labelledby="ModalLabel"
+     aria-hidden="true">
+  <div class="modal-dialog modal-dialog-scrollable modal-lg" role="document">
+    <div class="modal-content">
+      <div class="modal-header text-center">
+        <h4 class="modal-title w-100 font-weight-bold">搜索</h4>
+        <button type="button" id="local-search-close" class="close" data-dismiss="modal" aria-label="Close">
+          <span aria-hidden="true">&times;</span>
+        </button>
+      </div>
+      <div class="modal-body mx-3">
+        <div class="md-form mb-5">
+          <input type="text" id="local-search-input" class="form-control validate">
+          <label data-error="x" data-success="v"
+                 for="local-search-input">关键词</label>
+        </div>
+        <div class="list-group" id="local-search-result"></div>
+      </div>
+    </div>
+  </div>
+</div>
+    
+
+    
+  </main>
+
+  <footer class="text-center mt-5 py-3">
+  <div class="footer-content">
+     <a href="https://hexo.io" target="_blank" rel="nofollow noopener"><span>Hexo</span></a> <i class="iconfont icon-love"></i> <a href="https://github.com/fluid-dev/hexo-theme-fluid" target="_blank" rel="nofollow noopener"><span>Fluid</span></a> 
+  </div>
+  
+
+  
+
+  
+</footer>
+
+
+  <!-- SCRIPTS -->
+  
+  <script  src="https://cdn.jsdelivr.net/npm/nprogress@0/nprogress.min.js" ></script>
+  <link  rel="stylesheet" href="https://cdn.jsdelivr.net/npm/nprogress@0/nprogress.min.css" />
+
+  <script>
+    NProgress.configure({"showSpinner":false,"trickleSpeed":100})
+    NProgress.start()
+    window.addEventListener('load', function() {
+      NProgress.done();
+    })
+  </script>
+
+
+<script  src="https://cdn.jsdelivr.net/npm/jquery@3/dist/jquery.min.js" ></script>
+<script  src="https://cdn.jsdelivr.net/npm/bootstrap@4/dist/js/bootstrap.min.js" ></script>
+<script  src="/js/events.js" ></script>
+<script  src="/js/plugins.js" ></script>
+
+<!-- Plugins -->
+
+
+  <script  src="/js/local-search.js" ></script>
+
+
+
+  
+    <script  src="/js/img-lazyload.js" ></script>
+  
+
+
+
+  
+
+
+
+  
+    <script  src="https://cdn.jsdelivr.net/npm/tocbot@4/dist/tocbot.min.js" ></script>
+  
+  
+    <script  src="https://cdn.jsdelivr.net/npm/@fancyapps/fancybox@3/dist/jquery.fancybox.min.js" ></script>
+  
+  
+    <script  src="https://cdn.jsdelivr.net/npm/anchor-js@4/anchor.min.js" ></script>
+  
+  
+    <script defer src="https://cdn.jsdelivr.net/npm/clipboard@2/dist/clipboard.min.js" ></script>
+  
+
+
+
+
+
+
+  <script  src="https://cdn.jsdelivr.net/npm/typed.js@2/lib/typed.min.js" ></script>
+  <script>
+    (function (window, document) {
+      var typing = Fluid.plugins.typing;
+      var title = document.getElementById('subtitle').title;
+      
+      typing(title)
+      
+    })(window, document);
+  </script>
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+<!-- 主题的启动项 保持在最底部 -->
+<script  src="/js/boot.js" ></script>
+
+
+</body>
+</html>

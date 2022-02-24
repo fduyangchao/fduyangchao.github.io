@@ -18,15 +18,15 @@
   <meta name="keywords" content="">
   <meta name="description" content="May the force be with you">
 <meta property="og:type" content="website">
-<meta property="og:title" content="分类 - golang">
-<meta property="og:url" content="https://fduyangcaho.github.io/categories/%E4%B8%93%E4%B8%9A/%E5%BC%80%E5%8F%91/golang/index.html">
+<meta property="og:title" content="Chao&#39;s Blog">
+<meta property="og:url" content="https://fduyangcaho.github.io/page/2/index.html">
 <meta property="og:site_name" content="Chao&#39;s Blog">
 <meta property="og:description" content="May the force be with you">
 <meta property="og:locale" content="zh_CN">
 <meta property="article:author" content="Chao">
 <meta name="twitter:card" content="summary_large_image">
   
-  <title>分类 - golang - Chao&#39;s Blog</title>
+  <title>Chao&#39;s Blog</title>
 
   <link  rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap@4/dist/css/bootstrap.min.css" />
 
@@ -57,7 +57,7 @@
 
 
 <body>
-  <header style="height: 60vh;">
+  <header style="height: 100vh;">
     <nav id="navbar" class="navbar fixed-top  navbar-expand-lg navbar-dark scrolling-navbar">
   <div class="container">
     <a class="navbar-brand" href="/">
@@ -153,18 +153,22 @@
 </nav>
 
     <div class="banner" id="banner" parallax=true
-         style="background: url('https://cdn.jsdelivr.net/gh/simonyangchao/resources@image/1597031623646.jpg') no-repeat center center;
+         style="background: url('https://cdn.jsdelivr.net/gh/simonyangchao/resources@image/1597031608177.jpeg') no-repeat center center;
            background-size: cover;">
       <div class="full-bg-img">
         <div class="mask flex-center" style="background-color: rgba(0, 0, 0, 0.3)">
           <div class="page-header text-center fade-in-up">
-            <span class="h2" id="subtitle" title="分类 - golang">
+            <span class="h2" id="subtitle" title="贤者以其昭昭使人昭昭，今以其昏昏使人昭昭">
               
             </span>
 
             
           </div>
 
+          
+            <div class="scroll-down-bar">
+              <i class="iconfont icon-arrowdown"></i>
+            </div>
           
         </div>
       </div>
@@ -175,45 +179,85 @@
     
       <div class="container nopadding-x-md">
         <div class="py-5" id="board"
-          >
+          style=margin-top:0>
           
           <div class="container">
             <div class="row">
               <div class="col-12 col-md-10 m-auto">
                 
 
-<div class="list-group">
-  <p class="h4">共计 3 篇文章</p>
-  <hr>
-  
-  
+
+  <div class="row mx-auto index-card">
     
-      
-      <p class="h5">2022</p>
     
-    <a href="/2022/02/24/golang-sync-cond-1/" class="list-group-item list-group-item-action">
-      <span class="archive-post-title">Go sync.Cond（一）：使用方法</span>
-      <time style="float: right;">02-24</time>
-    </a>
-  
+      <div class="col-12 col-md-4 m-auto index-img">
+        <a href="/2021/10/12/volume-manager-source-code-analysis/" target="_self">
+          <img src="https://cdn.jsdelivr.net/gh/simonyangchao/resources@image/kubernetes.jpeg" srcset="/img/loading.gif" lazyload alt="Volume Manager源码分析">
+        </a>
+      </div>
     
-      
-      <p class="h5">2021</p>
-    
-    <a href="/2021/11/04/resource-package/" class="list-group-item list-group-item-action">
-      <span class="archive-post-title">golang常用包系列: resource</span>
-      <time style="float: right;">11-04</time>
-    </a>
-  
-    
-    <a href="/2021/10/13/print-even-and-odd-numbers-in-two-goroutines/" class="list-group-item list-group-item-action">
-      <span class="archive-post-title">两个goroutine交叉打印奇偶数字</span>
-      <time style="float: right;">10-13</time>
-    </a>
-  
-</div>
+    <article class="col-12 col-md-8 mx-auto index-info">
+      <h1 class="index-header">
+        
+        <a href="/2021/10/12/volume-manager-source-code-analysis/" target="_self">
+          Volume Manager源码分析
+        </a>
+      </h1>
+
+      <p class="index-excerpt">
+        <a href="/2021/10/12/volume-manager-source-code-analysis/" target="_self">
+          
+          
+            
+          
+          工作中需要调研k8s存储插件从in-tree模式平滑升级到CSI的可行性，因此对Kubelet中的Volume Manager模块进行源码分析，期望在全面理解代码逻辑和设计思路的前提下，避免采坑。按照一贯的思路和习惯，从接口、数据结构、函数/方法三个方面入手。
+        </a>
+      </p>
+
+      <div class="index-btm post-metas">
+        
+          <div class="post-meta mr-3">
+            <i class="iconfont icon-date"></i>
+            <time datetime="2021-10-12 22:10" pubdate>
+              2021-10-12
+            </time>
+          </div>
+        
+        
+          <div class="post-meta mr-3">
+            <i class="iconfont icon-category"></i>
+            
+              <a href="/categories/%E4%B8%93%E4%B8%9A/">专业</a>
+            
+              <a href="/categories/%E4%B8%93%E4%B8%9A/%E5%BC%80%E5%8F%91/">开发</a>
+            
+              <a href="/categories/%E4%B8%93%E4%B8%9A/%E5%BC%80%E5%8F%91/Kubernetes/">Kubernetes</a>
+            
+          </div>
+        
+        
+          <div class="post-meta">
+            <i class="iconfont icon-tags"></i>
+            
+              <a href="/tags/Kubernetes/">Kubernetes</a>
+            
+              <a href="/tags/golang/">golang</a>
+            
+              <a href="/tags/%E4%BA%91%E5%8E%9F%E7%94%9F/">云原生</a>
+            
+          </div>
+        
+      </div>
+    </article>
+  </div>
 
 
+
+  <nav aria-label="navigation">
+    <span class="pagination" id="pagination">
+      <a class="extend prev" rel="prev" href="/"><i class="iconfont icon-arrowleft"></i></a><a class="page-number" href="/">1</a><span class="page-number current">2</span>
+    </span>
+  </nav>
 
 
 
